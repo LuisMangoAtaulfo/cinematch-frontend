@@ -6,12 +6,12 @@ export const routes: Routes = [
   {
     path: 'registro',
     loadComponent: () =>
-      import('./features/auth/registro/registro.component').then(m => m.RegistroComponent)
+        import('./features/auth/registro/registro.component').then(m => m.RegistroComponent)
   },
   {
     path: 'login',
     loadComponent: () =>
-      import('./features/auth/login/login.component').then(m => m.LoginComponent)
+        import('./features/auth/login/login.component').then(m => m.LoginComponent)
   },
 
   // ── App protegida ─────────────────────────────────────
@@ -19,84 +19,91 @@ export const routes: Routes = [
     path: 'home',
     canActivate: [authGuard],
     loadComponent: () =>
-      import('./features/home/home.component').then(m => m.HomeComponent)
+        import('./features/home/home.component').then(m => m.HomeComponent)
   },
   {
     path: 'perfil',
     canActivate: [authGuard],
     loadComponent: () =>
-      import('./features/perfil/perfil.component').then(m => m.PerfilComponent)
+        import('./features/perfil/perfil.component').then(m => m.PerfilComponent)
   },
   {
     path: 'sala',
     canActivate: [authGuard],
     loadComponent: () =>
-      import('./features/sala/sala.component').then(m => m.SalaComponent)
+        import('./features/sala/sala.component').then(m => m.SalaComponent)
   },
   {
     path: 'filtros',
     canActivate: [authGuard],
     loadComponent: () =>
-      import('./features/filtros/filtros.component').then(m => m.FiltrosComponent)
+        import('./features/filtros/filtros.component').then(m => m.FiltrosComponent)
+  },
+  {
+    path: 'espera-filtros',
+    canActivate: [authGuard],
+    loadComponent: () =>
+        import('./features/sala/espera-filtros.component')
+            .then(m => m.EsperaFiltrosComponent)
   },
   {
     path: 'swipe',
     canActivate: [authGuard],
     loadComponent: () =>
-      import('./features/swipe/swipe.component').then(m => m.SwipeComponent)
+        import('./features/swipe/swipe.component').then(m => m.SwipeComponent)
   },
   {
     path: 'matches',
     canActivate: [authGuard],
     loadComponent: () =>
-      import('./features/matches/matches.component').then(m => m.MatchesComponent)
+        import('./features/matches/matches.component').then(m => m.MatchesComponent)
   },
   {
     path: 'chat',
     canActivate: [authGuard],
     loadComponent: () =>
-      import('./features/chat/chat.component').then(m => m.ChatComponent)
+        import('./features/chat/chat.component').then(m => m.ChatComponent)
   },
   {
     path: 'resultados',
     canActivate: [authGuard],
     loadComponent: () =>
-      import('./features/resultados/resultados.component').then(m => m.ResultadosComponent)
+        import('./features/resultados/resultados.component').then(m => m.ResultadosComponent)
   },
   {
     path: 'calificacion',
     canActivate: [authGuard],
     loadComponent: () =>
-      import('./features/calificacion/calificacion.component').then(m => m.CalificacionComponent)
+        import('./features/calificacion/calificacion.component').then(m => m.CalificacionComponent)
   },
 
   // ── Admin ─────────────────────────────────────────────
   {
     path: 'admin/login',
     loadComponent: () =>
-      import('./features/admin/login/admin-login.component').then(m => m.AdminLoginComponent)
+        import('./features/admin/login/admin-login.component').then(m => m.AdminLoginComponent)
   },
   {
     path: 'admin/metricas',
     canActivate: [adminGuard],
     loadComponent: () =>
-      import('./features/admin/metricas/metricas.component').then(m => m.MetricasComponent)
+        import('./features/admin/metricas/metricas.component').then(m => m.MetricasComponent)
   },
   {
     path: 'admin/plataformas',
     canActivate: [adminGuard],
     loadComponent: () =>
-      import('./features/admin/plataformas/plataformas.component').then(m => m.PlataformasComponent)
+        import('./features/admin/plataformas/plataformas.component').then(m => m.PlataformasComponent)
   },
   {
     path: 'admin/retroalimentacion',
     canActivate: [adminGuard],
     loadComponent: () =>
-      import('./features/admin/retroalimentacion/retroalimentacion.component')
-        .then(m => m.RetroalimentacionComponent)
+        import('./features/admin/retroalimentacion/retroalimentacion.component')
+            .then(m => m.RetroalimentacionComponent)
   },
 
   // ── Redirects ─────────────────────────────────────────
-  { path: '',       redirectTo: 'home',  pathMatch: 'full' },
-  { path: '**',     redirectTo: 'home' }
+  { path: '',   redirectTo: 'home', pathMatch: 'full' },
+  { path: '**', redirectTo: 'home' }
 ];

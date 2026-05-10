@@ -73,8 +73,10 @@ import { GeneroContenido, TipoContenido } from '../../core/models';
                 {{ cargando() ? 'Aplicando...' : 'Aplicar filtros' }}
               </button>
 
-              <button class="btn btn--ghost btn--full" (click)="omitir()">
-                Omitir
+              <button class="btn btn--ghost btn--full"
+                      [disabled]="cargando()"
+                      (click)="omitir()">
+                {{ cargando() ? 'Cargando...' : 'Omitir filtros' }}
               </button>
 
             </div>
@@ -122,6 +124,21 @@ export class FiltrosComponent {
   }
 
   omitir(): void {
-    this.router.navigate(['/swipe']);
+    const salaId = this.state.salaId();
+    if (!salaId) { this.router.navigate(['/home']); return; }
+
+    this.error.set('');
+    this.cargando.set(true);
+
+    this.filtrosSvc.aplicar({ salaId }).subscribe({
+      next: (contenido) => {
+        this.state.setContenido(contenido);
+        this.router.navigate(['/swipe']);
+      },
+      error: () => {
+        this.error.set('No se pudo cargar el catálogo');
+        this.cargando.set(false);
+      }
+    });
   }
 }

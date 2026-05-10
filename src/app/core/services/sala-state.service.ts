@@ -13,18 +13,20 @@ export class SalaStateService {
   private _contenido = signal<Contenido[]>([]);
   private _indice    = signal(0);
   private _matches   = signal<Match[]>([]);
+  private _esCreador = signal<boolean>(false);
 
   // ── Readonly signals ──────────────────────────────────
   readonly sala      = this._sala.asReadonly();
   readonly contenido = this._contenido.asReadonly();
   readonly indice    = this._indice.asReadonly();
   readonly matches   = this._matches.asReadonly();
+  readonly esCreador = this._esCreador.asReadonly();
 
   // ── Computed ──────────────────────────────────────────
-  readonly hayMas = computed(() => this._indice() < this._contenido().length);
-  readonly actual = computed(() => this._contenido()[this._indice()] ?? null);
+  readonly hayMas      = computed(() => this._indice() < this._contenido().length);
+  readonly actual      = computed(() => this._contenido()[this._indice()] ?? null);
   readonly totalMatches = computed(() => this._matches().length);
-  readonly salaId = computed(() => this._sala()?.id ?? null);
+  readonly salaId      = computed(() => this._sala()?.id ?? null);
 
   // ── Mutaciones ────────────────────────────────────────
   setSala(sala: Sala): void {
@@ -48,10 +50,16 @@ export class SalaStateService {
     this._matches.set(matches);
   }
 
+  /** Indica si el usuario actual fue quien creó la sala */
+  setEsCreador(valor: boolean): void {
+    this._esCreador.set(valor);
+  }
+
   reset(): void {
     this._sala.set(null);
     this._contenido.set([]);
     this._indice.set(0);
     this._matches.set([]);
+    this._esCreador.set(false);
   }
 }

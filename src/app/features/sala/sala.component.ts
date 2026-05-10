@@ -1,6 +1,7 @@
-import { Component, signal, OnInit } from '@angular/core';
+import { Component, signal, OnInit, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink, Router, ActivatedRoute } from '@angular/router';
+import { RouterLink, Router } from '@angular/router';
+import { interval, Subject, switchMap, takeUntil } from 'rxjs';
 import { SalaService } from '../../core/services/sala.service';
 import { SalaStateService } from '../../core/services/sala-state.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -40,7 +41,9 @@ import { Usuario } from '../../core/models';
               </button>
               <div style="display:flex; align-items:center; gap:8px;">
                 <hr class="divider" style="flex:1">
-                <span style="font-size:13px; color:var(--text-sub);">esperando compañero...</span>
+                <span style="font-size:13px; color:var(--text-sub);">
+                  esperando compañero...
+                </span>
                 <hr class="divider" style="flex:1">
               </div>
             } @else {
@@ -84,7 +87,7 @@ import { Usuario } from '../../core/models';
     </div>
   `
 })
-export class SalaComponent implements OnInit {
+export class SalaComponent implements OnInit, OnDestroy {
   codigoSala  = signal('');
   codigoInput = '';
   creando     = signal(false);
@@ -94,13 +97,13 @@ export class SalaComponent implements OnInit {
   errorUnirse = signal('');
 
   private usuarioId = 0;
+  private destroy$  = new Subject<void>();
 
   constructor(
-    private salaSvc: SalaService,
-    private state: SalaStateService,
-    private auth: AuthService,
-    private router: Router,
-    private route: ActivatedRoute
+      private salaSvc: SalaService,
+      private state: SalaStateService,
+      private auth: AuthService,
+      private router: Router
   ) {}
 
   ngOnInit(): void {
@@ -108,18 +111,48 @@ export class SalaComponent implements OnInit {
     this.usuarioId = u?.id ?? 0;
   }
 
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
   crearSala(): void {
     this.errorCrear.set('');
     this.creando.set(true);
+
     this.salaSvc.crear({ usuarioId: this.usuarioId }).subscribe({
       next: (sala) => {
         this.state.setSala(sala);
+        this.state.setEsCreador(true);
         this.codigoSala.set(sala.codigo);
         this.creando.set(false);
+        this.iniciarPollingCreador(sala.id);
       },
       error: () => {
         this.errorCrear.set('No se pudo crear la sala');
         this.creando.set(false);
+      }
+    });
+  }
+
+  /**
+   * Consulta el estado de la sala cada 3 segundos.
+   * Cuando detecta estado ACTIVA (el invitado se unió),
+   * detiene el polling y navega a /filtros.
+   */
+  private iniciarPollingCreador(salaId: number): void {
+    interval(3000).pipe(
+        switchMap(() => this.salaSvc.getById(salaId)),
+        takeUntil(this.destroy$)
+    ).subscribe({
+      next: (sala) => {
+        if (sala.estado === 'ACTIVA') {
+          this.destroy$.next(); // detiene el polling
+          this.router.navigate(['/filtros']);
+        }
+      },
+      error: () => {
+        // Si falla una consulta, el interval reintenta solo en el próximo tick
       }
     });
   }
@@ -138,16 +171,19 @@ export class SalaComponent implements OnInit {
       return;
     }
     this.uniendose.set(true);
+
     this.salaSvc.unirse({ codigo: this.codigoInput, usuarioId: this.usuarioId }).subscribe({
       next: (sala) => {
         this.state.setSala(sala);
-        this.router.navigate(['/filtros']);
+        this.state.setEsCreador(false);
+        // El invitado espera a que el creador elija filtros
+        this.router.navigate(['/espera-filtros']);
       },
       error: (e) => {
         this.errorUnirse.set(
-          e.status === 400 ? 'Código de sala inválido' :
-          e.status === 409 ? 'La sala ya no está disponible' :
-          'Error al unirse a la sala'
+            e.status === 400 ? 'Código de sala inválido' :
+                e.status === 409 ? 'La sala ya no está disponible' :
+                    'Error al unirse a la sala'
         );
         this.uniendose.set(false);
       }

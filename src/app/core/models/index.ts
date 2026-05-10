@@ -65,12 +65,15 @@ export type GeneroContenido =
 
 export interface Contenido {
   contenidoId: string;
-  titulo: string;
-  anio: number;
-  tipo: TipoContenido;
-  genero: GeneroContenido;
-  imagen: string;
+  titulo:      string;
+  anio:        number;
+  tipo:        'PELICULA' | 'SERIE';
+  genero:      string;
+  imagen:      string;
+  plataformas: string[];   // ← nuevo campo
 }
+
+
 
 // ── Filtros ───────────────────────────────────────────
 export interface FiltrosRequest {

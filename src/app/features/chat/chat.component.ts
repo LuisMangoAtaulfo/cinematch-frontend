@@ -4,7 +4,7 @@ import { RouterLink } from '@angular/router';
 import { ChatService } from '../../core/services/chat.service';
 import { SalaStateService } from '../../core/services/sala-state.service';
 import { AuthService } from '../../core/services/auth.service';
-import { Mensaje, Usuario } from '../../core/models';
+import { Usuario } from '../../core/models';
 
 @Component({
   selector: 'app-chat',
@@ -23,6 +23,11 @@ import { Mensaje, Usuario } from '../../core/models';
     .chat-msg--out { align-items: flex-end; }
     .chat-msg--in  { align-items: flex-start; }
     .chat-name { font-size: 11px; color: var(--text-sub); margin-bottom: 3px; }
+    .ws-status {
+      font-size: 11px; padding: 4px 10px;
+      border-radius: 20px; display: inline-flex; align-items: center; gap: 5px;
+    }
+    .ws-dot { width: 6px; height: 6px; border-radius: 50%; }
   `],
   template: `
     <div class="page">
@@ -34,19 +39,34 @@ import { Mensaje, Usuario } from '../../core/models';
         </div>
       </nav>
 
-      @if (nuevoMatch()) {
+      <!-- Banner de nuevo match recibido por WS -->
+      @if (ultimoMatch()) {
         <div style="background:var(--accent); color:#0f0f0f; padding:12px 24px;
-                    text-align:center; font-weight:500;">
-          🎉 ¡Match! Encontraron: {{ nuevoMatch() }}
+                    text-align:center; font-weight:500; cursor:pointer;"
+             (click)="ultimoMatch.set('')">
+          🎉 ¡Match! {{ ultimoMatch() }}
+        </div>
+      }
+
+      <!-- Estado conexión WS (solo si desconectado) -->
+      @if (!chatSvc.conectado()) {
+        <div style="background:var(--surface2); border-bottom:1px solid var(--border);
+                    padding:8px 24px; display:flex; align-items:center; gap:8px;">
+          <span class="ws-dot" style="background:var(--danger);"></span>
+          <span style="font-size:12px; color:var(--text-sub);">Reconectando chat...</span>
         </div>
       }
 
       <div class="chat-area" #chatArea>
         @if (cargando()) {
-          <p style="color:var(--text-sub); text-align:center;">Cargando mensajes...</p>
+          <p style="color:var(--text-sub); text-align:center; margin-top:20px;">
+            Cargando mensajes...
+          </p>
         }
+
         @for (msg of chatSvc.mensajes(); track msg.id) {
-          <div class="chat-msg" [class]="msg.usuarioId === usuarioId ? 'chat-msg--out' : 'chat-msg--in'">
+          <div class="chat-msg"
+               [class]="msg.usuarioId === usuarioId ? 'chat-msg--out' : 'chat-msg--in'">
             @if (msg.usuarioId !== usuarioId) {
               <span class="chat-name">{{ msg.nombreUsuario }}</span>
             }
@@ -57,13 +77,21 @@ import { Mensaje, Usuario } from '../../core/models';
             <span class="chat-time">{{ formatHora(msg.fechaEnvio) }}</span>
           </div>
         }
+
+        @if (!cargando() && chatSvc.mensajes().length === 0) {
+          <p style="color:var(--text-sub); text-align:center; margin-top:40px; font-size:14px;">
+            Aún no hay mensajes. ¡Di algo!
+          </p>
+        }
       </div>
 
       <div class="chat-input-bar">
         <input type="text" placeholder="Escribe un mensaje..." style="flex:1;"
                [(ngModel)]="texto"
                (keydown.enter)="enviar()">
-        <button class="btn btn--primary" style="padding:11px 18px;" (click)="enviar()">
+        <button class="btn btn--primary" style="padding:11px 18px;"
+                [disabled]="!chatSvc.conectado()"
+                (click)="enviar()">
           Enviar
         </button>
       </div>
@@ -75,53 +103,61 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   texto      = '';
   cargando   = signal(true);
-  nuevoMatch = signal('');
+  ultimoMatch = signal('');
   usuarioId  = 0;
 
+  private matchesYaVistos = 0;
+
   constructor(
-    public chatSvc: ChatService,
-    public state: SalaStateService,
-    private auth: AuthService
+      public chatSvc: ChatService,
+      public state: SalaStateService,
+      private auth: AuthService
   ) {}
 
   ngOnInit(): void {
-    const u     = this.auth.usuario() as Usuario;
-    const token = this.auth.token()!;
+    const u      = this.auth.usuario() as Usuario;
+    const token  = this.auth.token()!;
     const salaId = this.state.salaId()!;
     this.usuarioId = u?.id ?? 0;
 
-    // Cargar historial REST
-    this.chatSvc.getHistorial(salaId).subscribe({
-      next: (msgs) => {
-        this.chatSvc.mensajes.set(msgs);
-        this.cargando.set(false);
-      },
-      error: () => this.cargando.set(false)
-    });
+    // 1. Cargar historial — el servicio escribe en el signal directamente
+    this.chatSvc.cargarHistorial(salaId);
+    this.cargando.set(false);
 
-    // Conectar WebSocket
+    // 2. Conectar WebSocket (si ya está conectado, el servicio lo ignora)
     this.chatSvc.conectar(salaId, token);
 
-    // Notificaciones de match nuevas
-    // (las recibe el signal chatSvc.matches — podemos mostrarlo)
+    // 3. Guardar cuántos matches había antes de entrar al chat
+    //    para mostrar solo los nuevos que lleguen por WS
+    this.matchesYaVistos = this.chatSvc.matches().length;
   }
 
   ngAfterViewChecked(): void {
+    // Mostrar banner si llegó un match nuevo por WS mientras se chatea
+    const matchesActuales = this.chatSvc.matches();
+    if (matchesActuales.length > this.matchesYaVistos) {
+      const ultimo = matchesActuales[matchesActuales.length - 1];
+      this.ultimoMatch.set(ultimo.contenido?.titulo ?? 'Nuevo match');
+      this.matchesYaVistos = matchesActuales.length;
+    }
+
     this.scrollAbajo();
   }
 
   ngOnDestroy(): void {
-    // No desconectamos aquí para no interrumpir al navegar a Matches
-    // Llamar desconectar() en Resultados
+    // No desconectamos aquí — el WS sigue activo para recibir matches en swipe.
+    // Llamar chatSvc.desconectar() solo desde ResultadosComponent.
   }
 
   enviar(): void {
-    if (!this.texto.trim()) return;
+    const texto = this.texto.trim();
+    if (!texto || !this.chatSvc.conectado()) return;
+
     const salaId = this.state.salaId()!;
     this.chatSvc.enviarMensaje({
       salaId,
       usuarioId: this.usuarioId,
-      texto: this.texto.trim()
+      texto
     });
     this.texto = '';
   }

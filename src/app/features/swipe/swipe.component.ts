@@ -1,10 +1,10 @@
-import { Component, signal, OnInit } from '@angular/core';
+import { Component, signal, OnInit, effect } from '@angular/core';
 import { RouterLink, Router } from '@angular/router';
 import { SalaStateService } from '../../core/services/sala-state.service';
 import { EvaluacionesService } from '../../core/services/evaluaciones.service';
 import { SalaService } from '../../core/services/sala.service';
 import { AuthService } from '../../core/services/auth.service';
-import { TMDbFacadeService } from '../../core/services/tmdb-facade.service';
+import { ChatService } from '../../core/services/chat.service';
 import { Usuario } from '../../core/models';
 
 @Component({
@@ -31,7 +31,10 @@ import { Usuario } from '../../core/models';
       font-family: var(--font-disp); font-size: 22px;
       position: relative; z-index: 1; color: #fff;
     }
-    .swipe-card__body { padding: 16px 20px 20px; display: flex; flex-direction: column; gap: 10px; }
+    .swipe-card__body {
+      padding: 16px 20px 20px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
     .swipe-card__meta { display: flex; gap: 8px; flex-wrap: wrap; }
     .swipe-actions { display: flex; gap: 16px; justify-content: center; margin-top: 24px; }
     .swipe-btn {
@@ -42,13 +45,22 @@ import { Usuario } from '../../core/models';
       transition: transform var(--transition), border-color var(--transition), background var(--transition);
     }
     .swipe-btn:hover { transform: scale(1.1); }
-    .swipe-btn--reject:hover { border-color: var(--danger); background: rgba(224,85,85,0.1); }
+    .swipe-btn--reject:hover { border-color: var(--danger);  background: rgba(224,85,85,0.1); }
     .swipe-btn--approve:hover { border-color: var(--success); background: rgba(85,196,122,0.1); }
     .session-bar {
       display: flex; gap: 12px; align-items: center;
       padding: 10px 0; border-bottom: 1px solid var(--border); margin-bottom: 20px;
     }
     .session-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
+    .platform-tag {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 20px; padding: 3px 10px;
+      font-size: 12px; color: var(--text-sub);
+    }
+    .divider-row {
+      border: none; border-top: 1px solid var(--border); margin: 2px 0;
+    }
   `],
   template: `
     <div class="page">
@@ -66,6 +78,15 @@ import { Usuario } from '../../core/models';
         </div>
       </nav>
 
+      <!-- Banner de match recibido por WS -->
+      @if (nuevoMatch()) {
+        <div style="background:var(--accent); color:#0f0f0f; padding:12px 24px;
+                    text-align:center; font-weight:500; cursor:pointer;"
+             (click)="nuevoMatch.set('')">
+           ¡Match! {{ nuevoMatch() }}
+        </div>
+      }
+
       <div style="flex:1; padding:24px;">
         <div style="max-width:380px; margin:0 auto;">
 
@@ -79,15 +100,32 @@ import { Usuario } from '../../core/models';
           @if (state.hayMas() && state.actual(); as contenido) {
             <div class="swipe-card">
               <div class="swipe-card__img"
-                   [style.background-image]="contenido.imagen ? 'url(' + tmdb.getPosterUrl(contenido.imagen) + ')' : ''">
+                   [style.background-image]="contenido.imagen ? 'url(' + contenido.imagen + ')' : ''">
                 <p class="swipe-card__title">{{ contenido.titulo }}</p>
               </div>
               <div class="swipe-card__body">
+
+                <!-- Año · Género · Tipo -->
                 <div class="swipe-card__meta">
                   <span class="tag">{{ contenido.anio }}</span>
                   <span class="tag">{{ contenido.genero }}</span>
                   <span class="tag">{{ contenido.tipo === 'PELICULA' ? 'Película' : 'Serie' }}</span>
                 </div>
+
+                <!-- Plataformas -->
+                <hr class="divider-row">
+                <div class="swipe-card__meta">
+                  @if (contenido.plataformas?.length) {
+                    @for (p of contenido.plataformas; track p) {
+                      <span class="platform-tag">{{ p }}</span>
+                    }
+                  } @else {
+                    <span class="platform-tag" style="color:var(--text-sub); font-style:italic;">
+                       Solo en cines
+                    </span>
+                  }
+                </div>
+
               </div>
             </div>
 
@@ -99,6 +137,7 @@ import { Usuario } from '../../core/models';
                       [disabled]="evaluando()"
                       (click)="evaluar(true)" title="Aprobar">✓</button>
             </div>
+
           } @else {
             <div style="text-align:center; padding:40px 0;">
               <p class="section-title">¡Eso es todo!</p>
@@ -111,25 +150,70 @@ import { Usuario } from '../../core/models';
 
         </div>
       </div>
+
+      <!-- Atribución requerida -->
+      <div style="padding:12px 24px; border-top:1px solid var(--border);
+                  display:flex; align-items:center; justify-content:center;
+                  gap:16px; flex-wrap:wrap;">
+        <span style="font-size:11px; color:var(--text-sub);">
+          Datos de contenido:
+          <a href="https://www.themoviedb.org" target="_blank"
+             style="color:var(--text-sub); text-decoration:underline;">TMDb</a>
+        </span>
+        <span style="font-size:11px; color:var(--border);">|</span>
+        <span style="font-size:11px; color:var(--text-sub);">
+          Disponibilidad en streaming:
+          <a href="https://www.justwatch.com" target="_blank"
+             style="color:var(--text-sub); text-decoration:underline;">JustWatch</a>
+        </span>
+      </div>
+
     </div>
   `
 })
 export class SwipeComponent implements OnInit {
-  evaluando = signal(false);
-  private usuarioId = 0;
+  evaluando  = signal(false);
+  nuevoMatch = signal('');
+  private usuarioId       = 0;
+  private matchesAnteriores = 0;
 
   constructor(
-    public state: SalaStateService,
-    public tmdb: TMDbFacadeService,
-    private evalSvc: EvaluacionesService,
-    private salaSvc: SalaService,
-    private auth: AuthService,
-    private router: Router
-  ) {}
+      public  state: SalaStateService,
+      public  chatSvc: ChatService,
+      private evalSvc: EvaluacionesService,
+      private salaSvc: SalaService,
+      private auth: AuthService,
+      private router: Router
+  ) {
+    // Reacciona cuando llega un nuevo match por WebSocket
+    effect(() => {
+      const matches = this.chatSvc.matches();
+      if (matches.length > this.matchesAnteriores) {
+        const ultimo = matches[matches.length - 1];
+        this.nuevoMatch.set(ultimo.contenido?.titulo ?? 'Nuevo match');
+        this.state.agregarMatch(ultimo);
+        this.matchesAnteriores = matches.length;
+      }
+    });
+
+    // Reacciona cuando el otro usuario finaliza la sala
+    effect(() => {
+      if (this.chatSvc.finalizada()) {
+        this.router.navigate(['/resultados']);
+      }
+    });
+  }
 
   ngOnInit(): void {
-    const u = this.auth.usuario() as Usuario;
+    const u      = this.auth.usuario() as Usuario;
+    const token  = this.auth.token()!;
+    const salaId = this.state.salaId()!;
     this.usuarioId = u?.id ?? 0;
+
+    // Conectar WebSocket aquí para recibir matches desde el swipe
+    // El ChatService ignora la llamada si ya está conectado
+    this.chatSvc.conectar(salaId, token);
+    this.matchesAnteriores = this.chatSvc.matches().length;
   }
 
   evaluar(decision: boolean): void {
@@ -149,7 +233,7 @@ export class SwipeComponent implements OnInit {
         this.evaluando.set(false);
       },
       error: () => {
-        this.state.avanzar();   // avanzar aunque falle
+        this.state.avanzar();
         this.evaluando.set(false);
       }
     });
@@ -160,7 +244,7 @@ export class SwipeComponent implements OnInit {
     if (!salaId) { this.router.navigate(['/home']); return; }
 
     this.salaSvc.finalizar(salaId).subscribe({
-      next: () => this.router.navigate(['/resultados']),
+      next:  () => this.router.navigate(['/resultados']),
       error: () => this.router.navigate(['/resultados'])
     });
   }

@@ -1,7 +1,7 @@
 export const environment = {
-  production: true,
-  apiUrl:     'https://api.cinematch.app',
-  wsUrl:      'wss://api.cinematch.app/ws',
+  production: false,
+  apiUrl:     'http://localhost:8080',
+  wsUrl:      'ws://localhost:8080/ws',
   tmdbApiUrl: 'https://api.themoviedb.org/3',
-  tmdbApiKey: 'TU_API_KEY_AQUI'
+  tmdbApiKey: ''   // ← reemplaza con tu API Key de TMDb
 };

@@ -11,9 +11,16 @@ export class ChatService {
   private stompClient: Client | null = null;
 
   // ── Signals reactivos ─────────────────────────────────
-  readonly mensajes = signal<Mensaje[]>([]);
-  readonly matches  = signal<Match[]>([]);
-  readonly conectado = signal(false);
+  private readonly _mensajes   = signal<Mensaje[]>([]);
+  private readonly _matches    = signal<Match[]>([]);
+  private readonly _conectado  = signal(false);
+  private readonly _finalizada = signal(false);
+
+  // Lectura pública
+  readonly mensajes   = this._mensajes.asReadonly();
+  readonly matches    = this._matches.asReadonly();
+  readonly conectado  = this._conectado.asReadonly();
+  readonly finalizada = this._finalizada.asReadonly();
 
   constructor(private http: HttpClient) {}
 
@@ -22,31 +29,51 @@ export class ChatService {
     return this.http.get<Mensaje[]>(`${this.base}/${salaId}`);
   }
 
+  cargarHistorial(salaId: number): void {
+    this.getHistorial(salaId).subscribe({
+      next: (msgs) => this._mensajes.set(msgs),
+      error: () => {}
+    });
+  }
+
   // ── WebSocket ─────────────────────────────────────────
   conectar(salaId: number, token: string): void {
+    if (this.stompClient?.active) return;
+
     this.stompClient = new Client({
       brokerURL: environment.wsUrl,
       connectHeaders: { Authorization: `Bearer ${token}` },
       reconnectDelay: 3000,
       onConnect: () => {
-        this.conectado.set(true);
+        this._conectado.set(true);
 
-        // Recibir mensajes de chat
-        this.stompClient!.subscribe('/topic/sala', (msg: IMessage) => {
-          const mensaje: Mensaje = JSON.parse(msg.body);
-          this.mensajes.update(prev => [...prev, mensaje]);
-        });
-
-        // Recibir notificaciones de match
+        // Mensajes de chat
         this.stompClient!.subscribe(
-          `/topic/sala/${salaId}/match`,
-          (msg: IMessage) => {
-            const match: Match = JSON.parse(msg.body);
-            this.matches.update(prev => [...prev, match]);
-          }
+            `/topic/sala/${salaId}`,
+            (msg: IMessage) => {
+              const mensaje: Mensaje = JSON.parse(msg.body);
+              this._mensajes.update(prev => [...prev, mensaje]);
+            }
+        );
+
+        // Notificaciones de match
+        this.stompClient!.subscribe(
+            `/topic/sala/${salaId}/match`,
+            (msg: IMessage) => {
+              const match: Match = JSON.parse(msg.body);
+              this._matches.update(prev => [...prev, match]);
+            }
+        );
+
+        // Notificación de sala finalizada
+        this.stompClient!.subscribe(
+            `/topic/sala/${salaId}/finalizar`,
+            () => {
+              this._finalizada.set(true);
+            }
         );
       },
-      onDisconnect: () => this.conectado.set(false)
+      onDisconnect: () => this._conectado.set(false)
     });
 
     this.stompClient.activate();
@@ -63,8 +90,9 @@ export class ChatService {
   desconectar(): void {
     this.stompClient?.deactivate();
     this.stompClient = null;
-    this.mensajes.set([]);
-    this.matches.set([]);
-    this.conectado.set(false);
+    this._mensajes.set([]);
+    this._matches.set([]);
+    this._finalizada.set(false);
+    this._conectado.set(false);
   }
 }
