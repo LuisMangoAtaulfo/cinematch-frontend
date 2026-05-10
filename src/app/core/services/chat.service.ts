@@ -31,7 +31,13 @@ export class ChatService {
 
   cargarHistorial(salaId: number): void {
     this.getHistorial(salaId).subscribe({
-      next: (msgs) => this._mensajes.set(msgs),
+      next: (msgs) => {
+        // Merge: tomar el historial REST como base y agregar
+        // los mensajes del signal que no estén ya en el historial
+        const idsHistorial = new Set(msgs.map(m => m.id));
+        const extras = this._mensajes().filter(m => !idsHistorial.has(m.id));
+        this._mensajes.set([...msgs, ...extras]);
+      },
       error: () => {}
     });
   }
