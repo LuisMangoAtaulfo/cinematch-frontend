@@ -28,10 +28,16 @@ export const routes: Routes = [
         import('./features/perfil/perfil.component').then(m => m.PerfilComponent)
   },
   {
-    path: 'sala',
+    path: 'sala/crear',
     canActivate: [authGuard],
     loadComponent: () =>
-        import('./features/sala/sala.component').then(m => m.SalaComponent)
+        import('./features/sala/crear-sala.component').then(m => m.CrearSalaComponent)
+  },
+  {
+    path: 'sala/unirse',
+    canActivate: [authGuard],
+    loadComponent: () =>
+        import('./features/sala/unirse-sala.component').then(m => m.UnirseSalaComponent)
   },
   {
     path: 'filtros',

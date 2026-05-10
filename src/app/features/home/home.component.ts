@@ -28,7 +28,7 @@ import { AuthService } from '../../core/services/auth.service';
               <p style="font-weight:500; margin-bottom:4px;">Crear sala</p>
               <p style="font-size:13px; color:var(--text-sub);">Genera un código y compártelo con tu compañero</p>
             </div>
-            <a routerLink="/sala" [queryParams]="{accion:'crear'}" class="btn btn--primary btn--full">
+            <a routerLink="/sala/crear" [queryParams]="{accion:'crear'}" class="btn btn--primary btn--full">
               Crear sala
             </a>
           </div>
@@ -38,7 +38,7 @@ import { AuthService } from '../../core/services/auth.service';
               <p style="font-weight:500; margin-bottom:4px;">Unirse a sala</p>
               <p style="font-size:13px; color:var(--text-sub);">Ingresa el código que te compartieron</p>
             </div>
-            <a routerLink="/sala" [queryParams]="{accion:'unirse'}" class="btn btn--secondary btn--full">
+            <a routerLink="/sala/unirse" [queryParams]="{accion:'unirse'}" class="btn btn--secondary btn--full">
               Unirse a sala
             </a>
           </div>

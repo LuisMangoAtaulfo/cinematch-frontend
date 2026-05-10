@@ -27,6 +27,9 @@ export class SalaStateService {
   readonly actual      = computed(() => this._contenido()[this._indice()] ?? null);
   readonly totalMatches = computed(() => this._matches().length);
   readonly salaId      = computed(() => this._sala()?.id ?? null);
+  private _catalogo = signal<Contenido[]>([]);
+  readonly catalogo = this._catalogo.asReadonly();
+
 
   // ── Mutaciones ────────────────────────────────────────
   setSala(sala: Sala): void {
@@ -48,6 +51,11 @@ export class SalaStateService {
 
   setMatches(matches: Match[]): void {
     this._matches.set(matches);
+  }
+
+
+  plataformasDe(contenidoId: string): string[] {
+    return this._contenido().find(c => c.contenidoId === contenidoId)?.plataformas ?? [];
   }
 
   /** Indica si el usuario actual fue quien creó la sala */

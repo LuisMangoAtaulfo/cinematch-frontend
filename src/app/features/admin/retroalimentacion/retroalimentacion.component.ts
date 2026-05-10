@@ -1,18 +1,19 @@
 import { Component, signal, computed, OnInit } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { RetroalimentacionService } from '../../../core/services/admin.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { CalificacionResponse } from '../../../core/models';
-import {DecimalPipe} from "@angular/common";
+import { DecimalPipe } from '@angular/common';
 
 @Component({
   selector: 'app-retroalimentacion',
   standalone: true,
-  imports: [RouterLink, DecimalPipe],
+  imports: [RouterLink, DecimalPipe, FormsModule],
   styles: [`
     .bar-row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
     .bar-track { flex: 1; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
-    .bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+    .bar-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.4s ease; }
     .bar-label { width: 16px; text-align: right; color: var(--text-sub); }
     .bar-count { width: 28px; color: var(--text-sub); font-size: 12px; }
   `],
@@ -35,37 +36,74 @@ import {DecimalPipe} from "@angular/common";
           @if (cargando()) {
             <p style="color:var(--text-sub);">Cargando...</p>
           } @else {
-            <!-- Promedio -->
-            <div class="card" style="display:flex; align-items:center; gap:24px; margin-bottom:16px;">
-              <div style="text-align:center;">
-                <p style="font-family:var(--font-disp); font-size:52px; color:var(--accent); line-height:1;">
-                  {{ promedio() | number:'1.1-1' }}
-                </p>
-                <p style="font-size:12px; color:var(--text-sub);">Promedio general</p>
+
+            <!-- Filtro de fechas -->
+            <div style="display:flex; gap:12px; align-items:flex-end; margin-bottom:28px; flex-wrap:wrap;">
+              <div class="form-group" style="flex:1; min-width:140px;">
+                <label>Desde</label>
+                <input
+                  type="date"
+                  [(ngModel)]="fechaDesde"
+                  [min]="fechaMin()"
+                  [max]="fechaHasta || fechaMax()">
               </div>
-              <div style="flex:1;">
-                <p style="font-size:13px; color:var(--text-sub); margin-bottom:4px;">
-                  Basado en <strong style="color:var(--text);">{{ calificaciones().length }}</strong> calificaciones
-                </p>
+              <div class="form-group" style="flex:1; min-width:140px;">
+                <label>Hasta</label>
+                <input
+                  type="date"
+                  [(ngModel)]="fechaHasta"
+                  [min]="fechaDesde || fechaMin()"
+                  [max]="fechaMax()">
               </div>
+              @if (fechaDesde || fechaHasta) {
+                <button class="btn btn--ghost" style="height:44px;" (click)="limpiarFiltro()">
+                  Limpiar
+                </button>
+              }
             </div>
 
-            <!-- Distribución -->
-            <div class="card">
-              <p style="font-weight:500; margin-bottom:16px;">Distribución de calificaciones</p>
-              <div style="display:flex; flex-direction:column; gap:10px;">
-                @for (valor of valoresDesc; track valor) {
-                  <div class="bar-row">
-                    <span class="bar-label">{{ valor }}</span>
-                    <div class="bar-track">
-                      <div class="bar-fill"
-                           [style.width]="getPorcentaje(valor) + '%'"></div>
-                    </div>
-                    <span class="bar-count">{{ getConteo(valor) }}</span>
-                  </div>
-                }
+            <!-- Sin resultados -->
+            @if (!calificacionesFiltradas().length) {
+              <div class="card" style="text-align:center; padding:32px;">
+                <p style="color:var(--text-sub);">No hay calificaciones en el rango seleccionado.</p>
               </div>
-            </div>
+            } @else {
+
+              <!-- Promedio -->
+              <div class="card" style="display:flex; align-items:center; gap:24px; margin-bottom:16px;">
+                <div style="text-align:center;">
+                  <p style="font-family:var(--font-disp); font-size:52px; color:var(--accent); line-height:1;">
+                    {{ promedio() | number:'1.1-1' }}
+                  </p>
+                  <p style="font-size:12px; color:var(--text-sub);">Promedio general</p>
+                </div>
+                <div style="flex:1;">
+                  <p style="font-size:13px; color:var(--text-sub); margin-bottom:4px;">
+                    Basado en <strong style="color:var(--text);">{{ calificacionesFiltradas().length }}</strong> calificaciones
+                  </p>
+                  @if (fechaDesde || fechaHasta) {
+                    <p style="font-size:12px; color:var(--accent); margin-top:4px;">● Filtro activo</p>
+                  }
+                </div>
+              </div>
+
+              <!-- Distribución -->
+              <div class="card">
+                <p style="font-weight:500; margin-bottom:16px;">Distribución de calificaciones</p>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                  @for (valor of valoresDesc; track valor) {
+                    <div class="bar-row">
+                      <span class="bar-label">{{ valor }}</span>
+                      <div class="bar-track">
+                        <div class="bar-fill" [style.width]="getPorcentaje(valor) + '%'"></div>
+                      </div>
+                      <span class="bar-count">{{ getConteo(valor) }}</span>
+                    </div>
+                  }
+                </div>
+              </div>
+
+            }
           }
         </div>
       </div>
@@ -75,32 +113,85 @@ import {DecimalPipe} from "@angular/common";
 export class RetroalimentacionComponent implements OnInit {
   calificaciones = signal<CalificacionResponse[]>([]);
   cargando       = signal(true);
-  readonly valoresDesc = [10,9,8,7,6,5,4,3,2,1];
+  readonly valoresDesc = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+
+  fechaDesde = '';
+  fechaHasta = '';
+
+  /** Fecha más antigua del dataset → mínimo seleccionable en el calendario */
+  fechaMin = computed(() => {
+    const lista = this.calificaciones();
+    if (!lista.length) return '';
+    const min = lista.reduce((a, b) => a.fecha < b.fecha ? a : b);
+    return this.toDateInput(min.fecha);
+  });
+
+  /** Fecha más reciente del dataset → máximo seleccionable en el calendario */
+  fechaMax = computed(() => {
+    const lista = this.calificaciones();
+    if (!lista.length) return '';
+    const max = lista.reduce((a, b) => a.fecha > b.fecha ? a : b);
+    return this.toDateInput(max.fecha);
+  });
+
+  calificacionesFiltradas = computed(() => {
+    const lista    = this.calificaciones();
+    const desde    = this.fechaDesde ? new Date(this.fechaDesde) : null;
+    const hastaRaw = this.fechaHasta ? new Date(this.fechaHasta) : null;
+    // Extender "hasta" al final del día seleccionado
+    const hasta = hastaRaw
+        ? new Date(hastaRaw.getFullYear(), hastaRaw.getMonth(), hastaRaw.getDate() + 1)
+        : null;
+
+    return lista.filter(c => {
+      const fecha = new Date(c.fecha);
+      if (desde && fecha < desde) return false;
+      if (hasta  && fecha >= hasta) return false;
+      return true;
+    });
+  });
 
   promedio = computed(() => {
-    const lista = this.calificaciones();
+    const lista = this.calificacionesFiltradas();
     if (!lista.length) return 0;
     return lista.reduce((sum, c) => sum + c.valor, 0) / lista.length;
   });
 
-  constructor(private retroSvc: RetroalimentacionService, private auth: AuthService) {}
+  constructor(
+      private retroSvc: RetroalimentacionService,
+      private auth: AuthService
+  ) {}
 
   ngOnInit(): void {
     this.retroSvc.getAll().subscribe({
-      next: (data) => { this.calificaciones.set(data); this.cargando.set(false); },
-      error: () => this.cargando.set(false)
+      next:  (data) => { this.calificaciones.set(data); this.cargando.set(false); },
+      error: ()     => this.cargando.set(false)
     });
   }
 
   getConteo(valor: number): number {
-    return this.calificaciones().filter(c => c.valor === valor).length;
+    return this.calificacionesFiltradas().filter(c => c.valor === valor).length;
   }
 
   getPorcentaje(valor: number): number {
-    const total = this.calificaciones().length;
+    const total = this.calificacionesFiltradas().length;
     if (!total) return 0;
     return Math.round((this.getConteo(valor) / total) * 100);
   }
 
+  limpiarFiltro(): void {
+    this.fechaDesde = '';
+    this.fechaHasta = '';
+  }
+
   logout(): void { this.auth.logout(); }
+
+  /** Convierte un LocalDateTime string o Date a formato yyyy-MM-dd para input[type=date] */
+  private toDateInput(fecha: string | Date): string {
+    const d    = new Date(fecha);
+    const yyyy = d.getFullYear();
+    const mm   = String(d.getMonth() + 1).padStart(2, '0');
+    const dd   = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
 }

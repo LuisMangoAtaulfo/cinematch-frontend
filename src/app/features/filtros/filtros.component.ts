@@ -113,6 +113,12 @@ export class FiltrosComponent {
       ...(this.plataforma ? { plataforma: this.plataforma }                  : {})
     }).subscribe({
       next: (contenido) => {
+        if (!contenido.length) {
+          // ← catálogo vacío: avisar al usuario en lugar de navegar
+          this.error.set('No encontramos contenido con esos filtros. Intenta con otros.');
+          this.cargando.set(false);
+          return;
+        }
         this.state.setContenido(contenido);
         this.router.navigate(['/swipe']);
       },
@@ -132,6 +138,11 @@ export class FiltrosComponent {
 
     this.filtrosSvc.aplicar({ salaId }).subscribe({
       next: (contenido) => {
+        if (!contenido.length) {
+          this.error.set('El catálogo está vacío. Contacta al administrador.');
+          this.cargando.set(false);
+          return;
+        }
         this.state.setContenido(contenido);
         this.router.navigate(['/swipe']);
       },

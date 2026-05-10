@@ -66,11 +66,17 @@ export class PerfilComponent implements OnInit {
 
   ngOnInit(): void {
     const u = this.auth.usuario() as (Usuario | null);
-    if (u) {
-      this.nombre      = u.nombre ?? '';
-      this.descripcion = (u as any).descripcion ?? '';
-      this.usuarioId   = u.id ?? 0;
-    }
+    if (!u?.id) return;
+
+    this.usuarioId = u.id;
+
+    this.perfilSvc.obtener(this.usuarioId).subscribe({
+      next: (datos) => {
+        this.nombre      = datos.nombre ?? '';
+        this.descripcion = datos.descripcion ?? '';
+      },
+      error: () => this.mensaje.set('Error al cargar el perfil')
+    });
   }
 
   guardar(): void {
@@ -85,7 +91,8 @@ export class PerfilComponent implements OnInit {
       nombre: this.nombre,
       descripcion: this.descripcion
     }).subscribe({
-      next: () => {
+      next: (datos) => {
+        this.auth.setUsuario(datos);
         this.exito.set(true);
         this.mensaje.set('Perfil actualizado correctamente');
         this.cargando.set(false);

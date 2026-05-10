@@ -42,6 +42,13 @@ import { Match } from '../../core/models';
                     {{ match.contenido?.genero }} ·
                     {{ match.contenido?.tipo === 'PELICULA' ? 'Película' : 'Serie' }}
                   </p>
+                  @if (state.plataformasDe(match.contenido?.contenidoId ?? '').length > 0) {
+                    <div style="display:flex; gap:4px; flex-wrap:wrap; margin-top:4px;">
+                      @for (p of state.plataformasDe(match.contenido?.contenidoId ?? ''); track p) {
+                        <span class="tag" style="font-size:11px;">{{ p }}</span>
+                      }
+                    </div>
+                  }
                 </div>
               </div>
             }

@@ -92,4 +92,9 @@ export class AuthService {
     localStorage.removeItem(USER_KEY);
     this.router.navigate(['/login']);
   }
+
+  setUsuario(usuario: Partial<Usuario>): void {
+    this._usuario.set(usuario);
+    localStorage.setItem(USER_KEY, JSON.stringify(usuario));
+  }
 }
