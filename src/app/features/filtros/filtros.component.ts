@@ -1,14 +1,15 @@
-import { Component, signal } from '@angular/core';
+import { Component, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink, Router } from '@angular/router';
+import { Router } from '@angular/router';
 import { FiltrosService } from '../../core/services/filtros.service';
+import { PlataformasService } from '../../core/services/admin.service'; // ajusta el path si es otro archivo
 import { SalaStateService } from '../../core/services/sala-state.service';
-import { GeneroContenido, TipoContenido } from '../../core/models';
+import { GeneroContenido, TipoContenido, Plataforma } from '../../core/models';
 
 @Component({
   selector: 'app-filtros',
   standalone: true,
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule],
   template: `
     <div class="page">
       <nav class="navbar">
@@ -27,13 +28,12 @@ import { GeneroContenido, TipoContenido } from '../../core/models';
 
               <div class="form-group">
                 <label for="plataforma">Plataforma</label>
-                <select id="plataforma" [(ngModel)]="plataforma" name="plataforma">
+                <select id="plataforma" [(ngModel)]="plataforma" name="plataforma"
+                        [disabled]="cargandoPlataformas()">
                   <option value="">Todas</option>
-                  <option>Netflix</option>
-                  <option>Disney+</option>
-                  <option>HBO Max</option>
-                  <option>Prime Video</option>
-                  <option>Apple TV+</option>
+                  @for (p of plataformas(); track p.id) {
+                    <option [value]="p.nombre">{{ p.nombre }}</option>
+                  }
                 </select>
               </div>
 
@@ -68,13 +68,13 @@ import { GeneroContenido, TipoContenido } from '../../core/models';
               }
 
               <button class="btn btn--primary btn--full" style="margin-top:4px"
-                      [disabled]="cargando()"
+                      [disabled]="cargando() || cargandoPlataformas()"
                       (click)="aplicar()">
                 {{ cargando() ? 'Aplicando...' : 'Aplicar filtros' }}
               </button>
 
               <button class="btn btn--ghost btn--full"
-                      [disabled]="cargando()"
+                      [disabled]="cargando() || cargandoPlataformas()"
                       (click)="omitir()">
                 {{ cargando() ? 'Cargando...' : 'Omitir filtros' }}
               </button>
@@ -86,18 +86,28 @@ import { GeneroContenido, TipoContenido } from '../../core/models';
     </div>
   `
 })
-export class FiltrosComponent {
+export class FiltrosComponent implements OnInit {
   plataforma = '';
   tipo       = '';
   genero     = '';
-  cargando   = signal(false);
-  error      = signal('');
+  cargando            = signal(false);
+  cargandoPlataformas = signal(true);
+  error               = signal('');
+  plataformas         = signal<Plataforma[]>([]);
 
   constructor(
-    private filtrosSvc: FiltrosService,
-    public state: SalaStateService,
-    private router: Router
+      private filtrosSvc:    FiltrosService,
+      private plataformasSvc: PlataformasService,
+      public  state:         SalaStateService,
+      private router:        Router
   ) {}
+
+  ngOnInit(): void {
+    this.plataformasSvc.getHabilitadas().subscribe({
+      next:  (data) => { this.plataformas.set(data); this.cargandoPlataformas.set(false); },
+      error: ()     => { this.cargandoPlataformas.set(false); } // falla silenciosa, el select queda solo con "Todas"
+    });
+  }
 
   aplicar(): void {
     const salaId = this.state.salaId();
@@ -108,13 +118,12 @@ export class FiltrosComponent {
 
     this.filtrosSvc.aplicar({
       salaId,
-      ...(this.tipo       ? { tipo:      this.tipo      as TipoContenido }   : {}),
-      ...(this.genero     ? { genero:    this.genero    as GeneroContenido } : {}),
-      ...(this.plataforma ? { plataforma: this.plataforma }                  : {})
+      ...(this.tipo       ? { tipo:       this.tipo      as TipoContenido }   : {}),
+      ...(this.genero     ? { genero:     this.genero    as GeneroContenido } : {}),
+      ...(this.plataforma ? { plataforma: this.plataforma }                   : {})
     }).subscribe({
       next: (contenido) => {
         if (!contenido.length) {
-          // ← catálogo vacío: avisar al usuario en lugar de navegar
           this.error.set('No encontramos contenido con esos filtros. Intenta con otros.');
           this.cargando.set(false);
           return;

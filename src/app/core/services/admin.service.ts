@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import {map, Observable} from 'rxjs';
 import {
   CalificacionResponse,
   Metricas,
@@ -32,6 +32,16 @@ export class PlataformasService {
 
   actualizarEstado(body: PlataformaEstadoRequest): Observable<void> {
     return this.http.put<void>(`${this.base}/estado`, body);
+  }
+
+  getHabilitadas(): Observable<Plataforma[]> {
+    return this.getAll().pipe(
+        map(p => p.filter(x => x.habilitada))
+    );
+  }
+
+  setEstado(id: number, habilitada: boolean): Observable<void> {
+    return this.http.put<void>(`${this.base}/estado`, { id, habilitada });
   }
 }
 

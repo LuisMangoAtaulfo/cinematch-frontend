@@ -17,7 +17,7 @@ import { Match } from '../../core/models';
         <span class="navbar__logo">CineMatch</span>
       </nav>
 
-      <div style="flex:1; padding:24px;">
+      <div style="flex:1; padding:24px;">                                                                                         
         <div style="max-width:500px; margin:0 auto;">
           <div style="text-align:center; margin-bottom:28px;">
             <p class="section-title">Resultados finales</p>
