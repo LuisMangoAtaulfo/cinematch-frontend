@@ -7,6 +7,30 @@ import { AuthService } from '../../../core/services/auth.service';
   selector: 'app-admin-login',
   standalone: true,
   imports: [FormsModule, RouterLink],
+  styles: [`
+  .input-password-wrapper {
+    position: relative;
+  }
+  .input-password-wrapper input {
+    padding-right: 42px;
+  }
+  .eye-btn {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-sub);
+    padding: 0;
+    display: flex;
+    align-items: center;
+    line-height: 1;
+    font-size: 16px;
+  }
+  .eye-btn:hover { color: var(--text); }
+`],
   template: `
     <div class="auth-page">
       <div class="auth-box">
@@ -20,9 +44,18 @@ import { AuthService } from '../../../core/services/auth.service';
                      [(ngModel)]="correo" name="correo">
             </div>
             <div class="form-group">
-              <label for="pass">Contraseña</label>
-              <input id="pass" type="password" placeholder="Tu contraseña"
-                     [(ngModel)]="password" name="password">
+              <label for="pass">Contrasena</label>
+              <div class="input-password-wrapper">
+                <input id="pass"
+                       [type]="verPassword() ? 'text' : 'password'"
+                       placeholder="Tu contrasena"
+                       [(ngModel)]="password" name="password">
+                <button type="button" class="eye-btn"
+                        (click)="verPassword.set(!verPassword())"
+                        [title]="verPassword() ? 'Ocultar' : 'Ver contrasena'">
+                  {{ verPassword() ? 'ocultar' : 'ver' }}
+                </button>
+              </div>
             </div>
             @if (error()) {
               <p class="form-error">{{ error() }}</p>
@@ -46,6 +79,8 @@ export class AdminLoginComponent {
   error    = signal('');
 
   constructor(private auth: AuthService, private router: Router) {}
+
+  verPassword = signal(false);
 
   onLogin(): void {
     this.error.set('');

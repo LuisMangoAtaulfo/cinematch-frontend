@@ -8,15 +8,29 @@ import {
   PlataformaEstadoRequest
 } from '../models';
 import { environment } from '../../../environments/environment';
+export interface MetricasDia {
+  fecha:                string;
+  totalSalas:           number;
+  salasActivas:         number;
+  totalMatches:         number;
+  promedioCalificacion: number | null;
+}
+// Agrega esta interfaz junto a las demas
 
 // ── Métricas ──────────────────────────────────────────
 @Injectable({ providedIn: 'root' })
+// El archivo queda así:
 export class MetricasService {
   private readonly base = `${environment.apiUrl}/api/metricas`;
   constructor(private http: HttpClient) {}
 
   get(): Observable<Metricas> {
     return this.http.get<Metricas>(this.base);
+  }
+
+  // AGREGA ESTO:
+  getHistorial(): Observable<MetricasDia[]> {
+    return this.http.get<MetricasDia[]>(`${this.base}/historial`);
   }
 }
 

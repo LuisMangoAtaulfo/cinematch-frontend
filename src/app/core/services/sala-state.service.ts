@@ -31,6 +31,9 @@ export class SalaStateService {
   readonly catalogo = this._catalogo.asReadonly();
 
 
+  private _tieneFiltros = signal(false);
+  readonly tieneFiltros = this._tieneFiltros.asReadonly();
+
   // ── Mutaciones ────────────────────────────────────────
   setSala(sala: Sala): void {
     this._sala.set(sala);
@@ -63,11 +66,16 @@ export class SalaStateService {
     this._esCreador.set(valor);
   }
 
+  setTieneFiltros(valor: boolean): void {
+    this._tieneFiltros.set(valor);
+  }
+
   reset(): void {
     this._sala.set(null);
     this._contenido.set([]);
     this._indice.set(0);
     this._matches.set([]);
     this._esCreador.set(false);
+    this._tieneFiltros.set(false);
   }
 }

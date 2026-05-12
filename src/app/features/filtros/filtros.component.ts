@@ -123,11 +123,9 @@ export class FiltrosComponent implements OnInit {
       ...(this.plataforma ? { plataforma: this.plataforma }                   : {})
     }).subscribe({
       next: (contenido) => {
-        if (!contenido.length) {
-          this.error.set('No encontramos contenido con esos filtros. Intenta con otros.');
-          this.cargando.set(false);
-          return;
-        }
+        if (!contenido.length) { /* ... ya existente */ }
+        const usaFiltros = !!(this.tipo || this.genero || this.plataforma);
+        this.state.setTieneFiltros(usaFiltros);  // <-- agrega esta linea
         this.state.setContenido(contenido);
         this.router.navigate(['/swipe']);
       },
