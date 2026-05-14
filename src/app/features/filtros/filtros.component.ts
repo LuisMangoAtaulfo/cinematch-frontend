@@ -125,7 +125,6 @@ export class FiltrosComponent implements OnInit {
       next: (contenido) => {
         if (!contenido.length) { /* ... ya existente */ }
         const usaFiltros = !!(this.tipo || this.genero || this.plataforma);
-        this.state.setTieneFiltros(usaFiltros);  // <-- agrega esta linea
         this.state.setContenido(contenido);
         this.router.navigate(['/swipe']);
       },

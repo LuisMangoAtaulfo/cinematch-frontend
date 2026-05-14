@@ -3,6 +3,8 @@ import {
   ElementRef, ViewChild, NgZone
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
+import { interval, Subject } from 'rxjs';
+import { switchMap, takeUntil } from 'rxjs/operators';
 import { SalaStateService }    from '../../core/services/sala-state.service';
 import { ChatService }         from '../../core/services/chat.service';
 import { EvaluacionesService } from '../../core/services/evaluaciones.service';
@@ -11,17 +13,17 @@ import { AuthService }         from '../../core/services/auth.service';
 import { Usuario }             from '../../core/models';
 
 // - Swipe thresholds -
-const THRESHOLD   = 0.30;   // fraction of card width needed to commit a swipe
-const MAX_ROTATE  = 18;     // max card tilt in degrees
-const FLY_DIST    = 1200;   // px the card travels off-screen on commit
-const BADGE_START = 0.08;   // drag fraction at which badge starts appearing
+const THRESHOLD        = 0.30;
+const MAX_ROTATE       = 18;
+const FLY_DIST         = 1200;
+const BADGE_START      = 0.08;
+const POLLING_INTERVAL = 4000; // ms entre consultas cuando espera nuevos filtros
 
 @Component({
   selector: 'app-swipe',
   standalone: true,
   imports: [RouterLink],
   styles: [`
-    /* -- Pause overlay -- */
     .pause-overlay {
       position: fixed; inset: 0; z-index: 200;
       background: rgba(10,10,10,0.82);
@@ -49,8 +51,6 @@ const BADGE_START = 0.08;   // drag fraction at which badge starts appearing
       width:7px; height:7px; border-radius:50%;
       background:var(--danger); animation:pulse 1.6s ease-in-out infinite;
     }
-
-    /* -- Reconnect bar -- */
     .reconnect-bar {
       background:var(--surface2); border-bottom:1px solid var(--border);
       padding:8px 24px; display:flex; align-items:center; gap:8px;
@@ -59,91 +59,47 @@ const BADGE_START = 0.08;   // drag fraction at which badge starts appearing
       width:7px; height:7px; border-radius:50%;
       background:var(--danger); animation:pulse 1.2s ease-in-out infinite;
     }
-
-    /* -- Match banner -- */
     .match-banner {
       background:var(--accent); color:#0f0f0f;
       padding:12px 24px; text-align:center; font-weight:500; cursor:pointer;
     }
-
-    /* -- Session bar -- */
     .session-bar {
       display:flex; gap:12px; align-items:center;
       padding:10px 0; border-bottom:1px solid var(--border); margin-bottom:20px;
     }
     .session-dot { width:8px; height:8px; border-radius:50%; }
-
-    /* -- Card wrapper: isolates drag from page scroll -- */
     .card-wrapper {
-      position: relative;
-      width: 100%;
-      max-width: 340px;
-      margin: 0 auto;
-      touch-action: none;      /* hand off ALL touch handling to pointer events */
-      user-select: none;
-      -webkit-user-select: none;
+      position: relative; width: 100%; max-width: 340px; margin: 0 auto;
+      touch-action: none; user-select: none; -webkit-user-select: none;
     }
-
-    /* -- Swipe decision badges -- */
     .swipe-badge {
-      position: absolute;
-      top: 24px;
-      z-index: 10;
-      padding: 6px 16px;
-      border-radius: 8px;
-      border-width: 3px;
-      border-style: solid;
-      font-family: var(--font-disp);
-      font-size: 26px;
-      font-weight: 700;
-      letter-spacing: 0.05em;
-      pointer-events: none;
-      opacity: 0;
+      position: absolute; top: 24px; z-index: 10;
+      padding: 6px 16px; border-radius: 8px;
+      border-width: 3px; border-style: solid;
+      font-family: var(--font-disp); font-size: 26px; font-weight: 700;
+      letter-spacing: 0.05em; pointer-events: none; opacity: 0;
     }
-    .swipe-badge--like {
-      left: 20px;
-      color: var(--success);
-      border-color: var(--success);
-      transform: rotate(-15deg);
-    }
-    .swipe-badge--nope {
-      right: 20px;
-      color: var(--danger);
-      border-color: var(--danger);
-      transform: rotate(15deg);
-    }
-
-    /* -- The draggable card -- */
+    .swipe-badge--like  { left: 20px;  color: var(--success); border-color: var(--success); transform: rotate(-15deg); }
+    .swipe-badge--nope  { right: 20px; color: var(--danger);  border-color: var(--danger);  transform: rotate(15deg); }
     .swipe-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
-      overflow: hidden;
-      width: 100%;
-      cursor: grab;
-      will-change: transform;
-      box-shadow: var(--shadow);
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); overflow: hidden; width: 100%;
+      cursor: grab; will-change: transform; box-shadow: var(--shadow);
     }
     .swipe-card:active { cursor: grabbing; }
-
     .swipe-card__img {
       width:100%; height:320px;
       background: linear-gradient(160deg, var(--surface2) 0%, #1e1e1e 100%);
       display:flex; align-items:flex-end; padding:20px; position:relative;
-      background-size: cover;
-      background-position: center;
+      background-size: cover; background-position: center;
     }
     .swipe-card__img::after {
       content:''; position:absolute; inset:0;
       background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 50%);
     }
-    .swipe-card__title {
-      font-family:var(--font-disp); font-size:22px; position:relative; z-index:1;
-    }
-    .swipe-card__body { padding:16px 20px 20px; display:flex; flex-direction:column; gap:10px; }
-    .swipe-card__meta { display:flex; gap:8px; flex-wrap:wrap; }
-
-    /* -- Action buttons (tap fallback) -- */
+    .swipe-card__title { font-family:var(--font-disp); font-size:22px; position:relative; z-index:1; }
+    .swipe-card__body  { padding:16px 20px 20px; display:flex; flex-direction:column; gap:10px; }
+    .swipe-card__meta  { display:flex; gap:8px; flex-wrap:wrap; }
     .swipe-actions { display:flex; gap:16px; justify-content:center; margin-top:24px; }
     .swipe-btn {
       width:60px; height:60px; border-radius:50%;
@@ -156,15 +112,33 @@ const BADGE_START = 0.08;   // drag fraction at which badge starts appearing
     .swipe-btn:hover:not(:disabled) { transform:scale(1.1); }
     .swipe-btn--reject:hover:not(:disabled)  { border-color:var(--danger);  background:rgba(224,85,85,.1); }
     .swipe-btn--approve:hover:not(:disabled) { border-color:var(--success); background:rgba(85,196,122,.1); }
-    /* Lit up while drag is in that direction */
     .swipe-btn--reject.active  { border-color:var(--danger);  background:rgba(224,85,85,.15); }
     .swipe-btn--approve.active { border-color:var(--success); background:rgba(85,196,122,.15); }
     .swipe-btn:disabled { opacity:.35; cursor:not-allowed; }
+    .swipe-hint { text-align:center; font-size:12px; color:var(--text-sub); margin-top:14px; opacity:.7; }
 
-    /* -- Hint -- */
-    .swipe-hint {
-      text-align:center; font-size:12px; color:var(--text-sub);
-      margin-top:14px; opacity:.7;
+    /* Skeleton shimmer */
+    .skeleton {
+      background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+      border-radius: var(--radius);
+    }
+    @keyframes shimmer { to { background-position: -200% 0; } }
+
+    /* Waiting dots */
+    .waiting-dots span {
+      display: inline-block;
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--accent);
+      margin: 0 3px;
+      animation: bounce 1.4s ease-in-out infinite;
+    }
+    .waiting-dots span:nth-child(2) { animation-delay: .2s; }
+    .waiting-dots span:nth-child(3) { animation-delay: .4s; }
+    @keyframes bounce {
+      0%, 80%, 100% { opacity:.25; transform:scale(.8); }
+      40%           { opacity:1;   transform:scale(1); }
     }
   `],
   template: `
@@ -236,16 +210,61 @@ const BADGE_START = 0.08;   // drag fraction at which badge starts appearing
             </span>
           </div>
 
-          <!-- Empty catalog -->
-          <!-- Empty catalog -->
-          @if (!state.hayMas()) {
+          <!-- ── Recuperando catálogo tras recarga ── -->
+          @if (recuperando()) {
+            <div style="display:flex; flex-direction:column; gap:16px; align-items:center; padding:20px 0;">
+              <div style="width:100%; max-width:340px;">
+                <div class="skeleton" style="width:100%; height:320px; border-radius:var(--radius-lg) var(--radius-lg) 0 0;"></div>
+                <div style="background:var(--surface); border:1px solid var(--border); border-top:none;
+                            border-radius:0 0 var(--radius-lg) var(--radius-lg); padding:16px 20px 20px;
+                            display:flex; flex-direction:column; gap:10px;">
+                  <div class="skeleton" style="height:14px; width:60%; border-radius:4px;"></div>
+                  <div class="skeleton" style="height:14px; width:40%; border-radius:4px;"></div>
+                </div>
+              </div>
+              <p style="font-size:13px; color:var(--text-sub);">Cargando catalogo...</p>
+            </div>
+          }
+
+          <!-- ── Error al recuperar ── -->
+          @if (errorRecuperacion()) {
+            <div style="text-align:center; padding:40px 0; color:var(--text-sub);">
+              <p style="color:var(--danger); font-weight:500; margin-bottom:8px;">
+                No se pudo cargar el catalogo
+              </p>
+              <p style="font-size:13px; margin-bottom:24px;">{{ errorRecuperacion() }}</p>
+              <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+                <button class="btn btn--primary btn--sm" (click)="recuperarCatalogo()">Reintentar</button>
+                <button class="btn btn--ghost btn--sm"   (click)="finalizar()">Finalizar sesion</button>
+              </div>
+            </div>
+          }
+
+          <!-- ── Esperando nuevos filtros del creador ── -->
+          @if (!recuperando() && !errorRecuperacion() && esperandoFiltros()) {
+            <div style="text-align:center; padding:40px 0; display:flex; flex-direction:column;
+                        align-items:center; gap:20px; color:var(--text-sub);">
+              <div class="waiting-dots">
+                <span></span><span></span><span></span>
+              </div>
+              <p style="font-weight:500; color:var(--text);">Catalogo evaluado</p>
+              <p style="font-size:13px; max-width:260px; line-height:1.6;">
+                Esperando que tu companero aplique nuevos filtros para continuar...
+              </p>
+              <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
+                <a routerLink="/matches" class="btn btn--ghost btn--sm">Ver matches</a>
+                <button class="btn btn--ghost btn--sm" (click)="finalizar()">Finalizar sesion</button>
+              </div>
+            </div>
+          }
+
+          <!-- ── Catálogo vacío y NO es el segundo usuario esperando ── -->
+          @if (!recuperando() && !errorRecuperacion() && !esperandoFiltros() && !state.hayMas()) {
             <div style="text-align:center; padding:40px 0; color:var(--text-sub);">
               <p style="font-weight:500; margin-bottom:8px;">Has evaluado todo el catalogo!</p>
-
-              @if (state.tieneFiltros()) {
+              @if (state.esCreador()) {
                 <p style="font-size:13px; margin-bottom:24px;">
-                  No hay mas contenido con los filtros actuales.
-                  Amplia los filtros para ver mas opciones.
+                  Cambia los filtros para seguir descubriendo contenido.
                 </p>
                 <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
                   <a routerLink="/filtros" class="btn btn--primary btn--sm">Cambiar filtros</a>
@@ -264,8 +283,8 @@ const BADGE_START = 0.08;   // drag fraction at which badge starts appearing
             </div>
           }
 
-          <!-- Swipe card -->
-          @if (state.hayMas() && state.actual(); as c) {
+          <!-- ── Swipe normal ── -->
+          @if (!recuperando() && !errorRecuperacion() && !esperandoFiltros() && state.hayMas() && state.actual(); as c) {
 
             <div class="card-wrapper"
                  #cardWrapper
@@ -274,10 +293,7 @@ const BADGE_START = 0.08;   // drag fraction at which badge starts appearing
                  (pointerup)="onPointerUp($event)"
                  (pointercancel)="onPointerCancel($event)">
 
-              <!-- LIKE badge (shown while dragging right) -->
               <div class="swipe-badge swipe-badge--like" #badgeLike>LIKE</div>
-
-              <!-- NOPE badge (shown while dragging left) -->
               <div class="swipe-badge swipe-badge--nope" #badgeNope>NOPALES</div>
 
               <div class="swipe-card" #card>
@@ -285,7 +301,6 @@ const BADGE_START = 0.08;   // drag fraction at which badge starts appearing
                      [style.background-image]="c.imagen ? 'url(' + c.imagen + ')' : 'none'">
                   <p class="swipe-card__title">{{ c.titulo }}</p>
                 </div>
-
                 <div class="swipe-card__body">
                   <div class="swipe-card__meta">
                     @if (c.anio)   { <span class="tag">{{ c.anio }}</span> }
@@ -294,7 +309,6 @@ const BADGE_START = 0.08;   // drag fraction at which badge starts appearing
                       <span class="tag">{{ p }}</span>
                     }
                   </div>
-
                   @if (!c.plataformas || c.plataformas.length === 0) {
                     <span class="tag">Solo en cines</span>
                   }
@@ -302,7 +316,6 @@ const BADGE_START = 0.08;   // drag fraction at which badge starts appearing
               </div>
             </div>
 
-            <!-- Tap buttons (mirror drag visually while dragging) -->
             <div class="swipe-actions">
               <button class="swipe-btn swipe-btn--reject"
                       [class.active]="dragDir() === -1"
@@ -366,22 +379,33 @@ export class SwipeComponent implements OnInit, OnDestroy {
   @ViewChild('badgeLike')   badgeLikeEl!: ElementRef<HTMLDivElement>;
   @ViewChild('badgeNope')   badgeNopeEl!: ElementRef<HTMLDivElement>;
 
-  evaluando  = signal(false);
-  nuevoMatch = signal('');
-  /** -1 = dragging left (nope)  |  0 = idle  |  1 = dragging right (like) */
-  dragDir    = signal(0);
+  evaluando         = signal(false);
+  nuevoMatch        = signal('');
+  recuperando       = signal(false);
+  errorRecuperacion = signal('');
+  /**
+   * true cuando el segundo usuario agotó el catálogo actual y está
+   * esperando que el creador aplique nuevos filtros.
+   */
+  esperandoFiltros  = signal(false);
+  dragDir           = signal(0);
 
   private usuarioId         = 0;
   private matchesAnteriores = 0;
+  private readonly evaluados = new Set<string>();
+
+  // Subject que cancela el polling cuando el componente se destruye
+  // o cuando llega un catálogo nuevo
+  private readonly stopPolling$ = new Subject<void>();
 
   // - Drag state -
-  private dragging   = false;
-  private startX     = 0;
-  private startY     = 0;
-  private currentX   = 0;
-  private cardWidth  = 340;
-  private rafId      = 0;
-  private committed  = false;
+  private dragging  = false;
+  private startX    = 0;
+  private startY    = 0;
+  private currentX  = 0;
+  private cardWidth = 340;
+  private rafId     = 0;
+  private committed = false;
 
   constructor(
       public  state:   SalaStateService,
@@ -412,34 +436,125 @@ export class SwipeComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     const u      = this.auth.usuario() as Usuario;
     const token  = this.auth.token()!;
-    const salaId = this.state.salaId()!;
+    const salaId = this.state.salaId();
     this.usuarioId = u?.id ?? 0;
+
+    if (!salaId) {
+      this.router.navigate(['/home']);
+      return;
+    }
+
     this.chatSvc.conectar(salaId, token, this.usuarioId);
     this.matchesAnteriores = this.chatSvc.matches().length;
+
+    // Si el catálogo está vacío (recarga de página), recuperarlo del backend
+    if (this.state.contenido().length === 0) {
+      this.recuperarCatalogo();
+    }
   }
 
   ngOnDestroy(): void {
     if (this.rafId) cancelAnimationFrame(this.rafId);
+    this.stopPolling$.next();
+    this.stopPolling$.complete();
   }
 
-  // -
+  // ─────────────────────────────────────────────────────
+  // Recuperación inicial (recarga de página)
+  // ─────────────────────────────────────────────────────
+
+  /**
+   * Llama a GET /api/filtros/{salaId} una sola vez para recuperar
+   * el catálogo tras una recarga. Reanuda desde el índice guardado
+   * en localStorage sin resetearlo.
+   */
+  recuperarCatalogo(): void {
+    const salaId = this.state.salaId()!;
+    this.recuperando.set(true);
+    this.errorRecuperacion.set('');
+
+    this.salaSvc.getFiltros(salaId).subscribe({
+      next: (contenido) => {
+        if (!contenido || contenido.length === 0) {
+          this.errorRecuperacion.set(
+              'El catálogo todavía no está listo. Pide a tu compañero que aplique los filtros.'
+          );
+        } else {
+          this.state.reanudarContenido(contenido);
+        }
+        this.recuperando.set(false);
+      },
+      error: () => {
+        this.errorRecuperacion.set(
+            'No se pudo conectar con el servidor. Verifica tu conexión e intenta de nuevo.'
+        );
+        this.recuperando.set(false);
+      }
+    });
+  }
+
+  // ─────────────────────────────────────────────────────
+  // Polling de nuevos filtros (segundo usuario espera al creador)
+  // ─────────────────────────────────────────────────────
+
+  /**
+   * Inicia un polling cada POLLING_INTERVAL ms llamando a
+   * GET /api/filtros/{salaId}. Cuando el backend devuelve un catálogo
+   * diferente al actual (el creador aplicó nuevos filtros), lo carga
+   * y detiene el polling automáticamente.
+   *
+   * Solo debe llamarse cuando !esCreador() y !hayMas().
+   */
+  private iniciarPollingFiltros(): void {
+    const salaId          = this.state.salaId()!;
+    const contenidoActual = this.state.contenido();
+
+    this.esperandoFiltros.set(true);
+
+    interval(POLLING_INTERVAL).pipe(
+        switchMap(() => this.salaSvc.getFiltros(salaId)),
+        takeUntil(this.stopPolling$)
+    ).subscribe({
+      next: (contenido) => {
+        if (!contenido || contenido.length === 0) return; // sigue esperando
+
+        // Detectar si es un catálogo NUEVO comparando el primer contenidoId
+        const esMismoCatalogo =
+            contenido.length === contenidoActual.length &&
+            contenido[0]?.contenidoId === contenidoActual[0]?.contenidoId;
+
+        if (!esMismoCatalogo) {
+          // Llegó un catálogo nuevo → detener polling y cargar
+          this.stopPolling$.next();
+          this.ngZone.run(() => {
+            this.state.setContenido(contenido); // reset índice a 0 con filtros nuevos
+            this.evaluados.clear();              // limpiar evaluaciones anteriores
+            this.esperandoFiltros.set(false);
+          });
+        }
+        // Si es el mismo catálogo, el polling sigue
+      },
+      error: () => {
+        // Errores de red no detienen el polling, reintenta en el próximo tick
+      }
+    });
+  }
+
+  // ─────────────────────────────────────────────────────
   // Pointer event handlers
-  // -
+  // ─────────────────────────────────────────────────────
 
   onPointerDown(e: PointerEvent): void {
     if (this.evaluando() || this.committed) return;
     if (this.chatSvc.companeroDesconectado() || !this.chatSvc.conectado()) return;
 
-    this.dragging = true;
-    this.startX   = e.clientX;
-    this.startY   = e.clientY;
-    this.currentX = 0;
+    this.dragging  = true;
+    this.startX    = e.clientX;
+    this.startY    = e.clientY;
+    this.currentX  = 0;
     this.cardWidth = this.wrapperEl?.nativeElement.offsetWidth || 340;
 
-    // Pointer capture: keeps events flowing even when pointer leaves the element
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-
-    // No transition while actively dragging (avoid lag)
     this.setCardTransition('none');
   }
 
@@ -449,19 +564,14 @@ export class SwipeComponent implements OnInit, OnDestroy {
     const dx = e.clientX - this.startX;
     const dy = e.clientY - this.startY;
 
-    // Cancel drag if the gesture is more vertical than horizontal at its start
-    // so the page can scroll normally on mobile
     if (Math.abs(dy) > Math.abs(dx) * 1.5 && Math.abs(dx) < 12) {
       this.cancelDrag();
       return;
     }
 
     this.currentX = dx;
-
-    // Update dragDir signal (inside zone so template reacts)
     this.dragDir.set(dx > 0 ? 1 : -1);
 
-    // Visual update outside zone: no need for CD on every frame
     this.ngZone.runOutsideAngular(() => {
       if (this.rafId) cancelAnimationFrame(this.rafId);
       this.rafId = requestAnimationFrame(() => this.applyDragTransform(dx));
@@ -484,9 +594,9 @@ export class SwipeComponent implements OnInit, OnDestroy {
     this.cancelDrag();
   }
 
-  // -
+  // ─────────────────────────────────────────────────────
   // Drag visuals
-  // -
+  // ─────────────────────────────────────────────────────
 
   private applyDragTransform(dx: number): void {
     const card      = this.cardEl?.nativeElement;
@@ -494,11 +604,10 @@ export class SwipeComponent implements OnInit, OnDestroy {
     const nopeBadge = this.badgeNopeEl?.nativeElement;
     if (!card) return;
 
-    const ratio  = dx / this.cardWidth;
-    const rotate = ratio * MAX_ROTATE;
+    const ratio   = dx / this.cardWidth;
+    const rotate  = ratio * MAX_ROTATE;
     card.style.transform = `translateX(${dx}px) rotate(${rotate}deg)`;
 
-    // Badge fades in after BADGE_START fraction
     const progress = (Math.abs(ratio) - BADGE_START) / (1 - BADGE_START);
     const opacity  = Math.max(0, Math.min(1, progress));
 
@@ -512,6 +621,8 @@ export class SwipeComponent implements OnInit, OnDestroy {
   }
 
   private commitSwipe(approved: boolean): void {
+    if (this.evaluando()) return;
+
     this.committed = true;
     const card = this.cardEl?.nativeElement;
     if (!card) { this.finishEval(approved); return; }
@@ -535,14 +646,13 @@ export class SwipeComponent implements OnInit, OnDestroy {
 
   private snapBack(): void {
     this.dragDir.set(0);
-    // Spring-like easing: overshoots slightly then settles
     this.setCardTransition('transform .4s cubic-bezier(.25,1.5,.5,1)');
     const card      = this.cardEl?.nativeElement;
     const likeBadge = this.badgeLikeEl?.nativeElement;
     const nopeBadge = this.badgeNopeEl?.nativeElement;
-    if (card)      card.style.transform      = 'translateX(0) rotate(0deg)';
-    if (likeBadge) likeBadge.style.opacity   = '0';
-    if (nopeBadge) nopeBadge.style.opacity   = '0';
+    if (card)      card.style.transform    = 'translateX(0) rotate(0deg)';
+    if (likeBadge) likeBadge.style.opacity = '0';
+    if (nopeBadge) nopeBadge.style.opacity = '0';
   }
 
   private cancelDrag(): void {
@@ -568,9 +678,9 @@ export class SwipeComponent implements OnInit, OnDestroy {
     if (nopeBadge) nopeBadge.style.opacity = '0';
   }
 
-  // -
+  // ─────────────────────────────────────────────────────
   // Business logic
-  // -
+  // ─────────────────────────────────────────────────────
 
   private finishEval(approved: boolean): void {
     this.evaluar(approved);
@@ -581,20 +691,54 @@ export class SwipeComponent implements OnInit, OnDestroy {
     const salaId    = this.state.salaId();
     if (!contenido || !salaId) return;
     if (this.chatSvc.companeroDesconectado()) return;
+    if (this.evaluando()) return;
 
+    if (this.evaluados.has(contenido.contenidoId)) {
+      this.state.avanzar();
+      return;
+    }
+
+    this.evaluados.add(contenido.contenidoId);
     this.evaluando.set(true);
+
     this.evalSvc.evaluar({
       salaId,
       usuarioId:   this.usuarioId,
       contenidoId: contenido.contenidoId,
       decision
     }).subscribe({
-      next:  () => { this.state.avanzar(); this.evaluando.set(false); },
-      error: () => { this.state.avanzar(); this.evaluando.set(false); }
+      next: () => {
+        this.state.avanzar();
+        this.evaluando.set(false);
+        // Si el segundo usuario acaba el catálogo → iniciar polling
+        this.checkCatalogoAgotado();
+      },
+      error: (err) => {
+        if (err.status === 409) {
+          this.state.avanzar();
+        } else {
+          this.evaluados.delete(contenido.contenidoId);
+          this.state.avanzar();
+        }
+        this.evaluando.set(false);
+        this.checkCatalogoAgotado();
+      }
     });
   }
 
+  /**
+   * Llamado después de cada evaluación.
+   * Si el catálogo se agotó y el usuario actual es el invitado (no creador),
+   * inicia el polling para detectar cuando el creador aplique nuevos filtros.
+   */
+  private checkCatalogoAgotado(): void {
+    if (!this.state.hayMas() && !this.state.esCreador() && !this.esperandoFiltros()) {
+      this.iniciarPollingFiltros();
+    }
+  }
+
   finalizar(): void {
+    this.stopPolling$.next(); // detener polling si estaba activo
     const salaId = this.state.salaId();
     if (!salaId) { this.router.navigate(['/home']); return; }
     this.salaSvc.finalizar(salaId).subscribe({
