@@ -7,6 +7,22 @@ import { SalaStateService } from '../../core/services/sala-state.service';
 @Component({
     selector: 'app-espera-filtros',
     standalone: true,
+    styles: [`
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    @keyframes pulse {
+      0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); }
+      40%           { opacity: 1;    transform: scale(1);   }
+    }
+    .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      display: inline-block;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+  `],
     template: `
     <div class="page">
       <nav class="navbar">
@@ -27,11 +43,9 @@ import { SalaStateService } from '../../core/services/sala-state.service';
           <div style="position:relative; width:72px; height:72px;">
             <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"
                  style="width:72px; height:72px; animation: spin 1.2s linear infinite;">
-              <circle cx="36" cy="36" r="30"
-                      stroke="var(--border)" stroke-width="5"/>
+              <circle cx="36" cy="36" r="30" stroke="var(--border)" stroke-width="5"/>
               <path d="M36 6 a30 30 0 0 1 30 30"
-                    stroke="var(--accent)" stroke-width="5"
-                    stroke-linecap="round"/>
+                    stroke="var(--accent)" stroke-width="5" stroke-linecap="round"/>
             </svg>
           </div>
 
@@ -55,32 +69,12 @@ import { SalaStateService } from '../../core/services/sala-state.service';
             <p style="font-size:13px; color:var(--danger);">{{ error() }}</p>
           }
 
-          <!-- Salir -->
-          <button class="btn btn--ghost"
-                  style="margin-top:8px;"
-                  (click)="salir()">
+          <button class="btn btn--ghost" style="margin-top:8px;" (click)="salir()">
             Cancelar y salir
           </button>
         </div>
       </div>
     </div>
-
-    <style>
-      @keyframes spin {
-        to { transform: rotate(360deg); }
-      }
-      @keyframes pulse {
-        0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); }
-        40%           { opacity: 1;    transform: scale(1);   }
-      }
-      .dot {
-        width: 10px; height: 10px;
-        border-radius: 50%;
-        background: var(--accent);
-        display: inline-block;
-        animation: pulse 1.4s ease-in-out infinite;
-      }
-    </style>
   `
 })
 export class EsperaFiltrosComponent implements OnInit, OnDestroy {
@@ -89,18 +83,13 @@ export class EsperaFiltrosComponent implements OnInit, OnDestroy {
 
     constructor(
         private salaSvc: SalaService,
-        public  state: SalaStateService,
-        private router: Router
+        public  state:   SalaStateService,
+        private router:  Router
     ) {}
 
     ngOnInit(): void {
         const salaId = this.state.salaId();
-
-        if (!salaId) {
-            this.router.navigate(['/home']);
-            return;
-        }
-
+        if (!salaId) { this.router.navigate(['/home']); return; }
         this.iniciarPollingFiltros(salaId);
     }
 
@@ -111,25 +100,25 @@ export class EsperaFiltrosComponent implements OnInit, OnDestroy {
 
     /**
      * Consulta GET /api/filtros/{salaId} cada 3 segundos.
-     * Cuando el backend responde 200 con contenido (filtros aplicados),
-     * guarda el catálogo en el estado compartido y navega a /swipe.
-     * Mientras responda 204, sigue esperando.
+     * - 'sin-filtros'    → 204: sigue esperando
+     * - 'sin-resultados' → 200 + []: sigue esperando (el creador eligió filtros sin resultados)
+     * - Contenido[]      → navega a /swipe con el catálogo
      */
     private iniciarPollingFiltros(salaId: number): void {
         interval(3000).pipe(
             switchMap(() => this.salaSvc.getFiltros(salaId)),
             takeUntil(this.destroy$)
         ).subscribe({
-            next: (contenido) => {
-                if (contenido && contenido.length > 0) {
-                    this.destroy$.next(); // detiene el polling
-                    this.state.setContenido(contenido);
-                    this.router.navigate(['/swipe']);
-                }
-                // Si viene vacío (204 mapeado a []), sigue esperando
+            next: (resultado) => {
+                if (resultado === 'sin-filtros' || resultado === 'sin-resultados') return;
+
+                // Tiene contenido → navegar
+                this.destroy$.next();
+                this.state.setContenido(resultado);
+                this.router.navigate(['/swipe']);
             },
             error: () => {
-                // Errores de red no detienen el polling, reintenta en el próximo tick
+                // Error de red: el interval reintentará en el próximo tick
             }
         });
     }

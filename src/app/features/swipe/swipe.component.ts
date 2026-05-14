@@ -12,12 +12,11 @@ import { SalaService }         from '../../core/services/sala.service';
 import { AuthService }         from '../../core/services/auth.service';
 import { Usuario }             from '../../core/models';
 
-// - Swipe thresholds -
 const THRESHOLD        = 0.30;
 const MAX_ROTATE       = 18;
 const FLY_DIST         = 1200;
 const BADGE_START      = 0.08;
-const POLLING_INTERVAL = 4000; // ms entre consultas cuando espera nuevos filtros
+const POLL_INTERVAL_MS = 4000;
 
 @Component({
   selector: 'app-swipe',
@@ -26,15 +25,13 @@ const POLLING_INTERVAL = 4000; // ms entre consultas cuando espera nuevos filtro
   styles: [`
     .pause-overlay {
       position: fixed; inset: 0; z-index: 200;
-      background: rgba(10,10,10,0.82);
-      backdrop-filter: blur(6px);
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      gap: 20px; padding: 32px; text-align: center;
+      background: rgba(10,10,10,0.82); backdrop-filter: blur(6px);
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 20px; padding: 32px; text-align: center;
       animation: fadeIn .25s ease;
     }
     @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
-    .pause-icon  { font-size:48px; animation:pulse 1.6s ease-in-out infinite; }
+    .pause-icon { font-size:48px; animation:pulse 1.6s ease-in-out infinite; }
     @keyframes pulse {
       0%,100% { opacity:1; transform:scale(1); }
       50%     { opacity:.5; transform:scale(.92); }
@@ -42,9 +39,8 @@ const POLLING_INTERVAL = 4000; // ms entre consultas cuando espera nuevos filtro
     .pause-title { font-family:var(--font-disp); font-size:20px; color:var(--text); margin:0; }
     .pause-sub   { font-size:13px; color:var(--text-sub); max-width:280px; line-height:1.6; margin:0; }
     .pause-badge {
-      display:inline-flex; align-items:center; gap:7px;
-      padding:6px 14px; border-radius:20px;
-      border:1px solid var(--danger); color:var(--danger);
+      display:inline-flex; align-items:center; gap:7px; padding:6px 14px;
+      border-radius:20px; border:1px solid var(--danger); color:var(--danger);
       font-size:12px; font-weight:500;
     }
     .pulse-dot {
@@ -74,28 +70,27 @@ const POLLING_INTERVAL = 4000; // ms entre consultas cuando espera nuevos filtro
     }
     .swipe-badge {
       position: absolute; top: 24px; z-index: 10;
-      padding: 6px 16px; border-radius: 8px;
-      border-width: 3px; border-style: solid;
+      padding: 6px 16px; border-radius: 8px; border-width: 3px; border-style: solid;
       font-family: var(--font-disp); font-size: 26px; font-weight: 700;
       letter-spacing: 0.05em; pointer-events: none; opacity: 0;
     }
-    .swipe-badge--like  { left: 20px;  color: var(--success); border-color: var(--success); transform: rotate(-15deg); }
-    .swipe-badge--nope  { right: 20px; color: var(--danger);  border-color: var(--danger);  transform: rotate(15deg); }
+    .swipe-badge--like { left:20px;  color:var(--success); border-color:var(--success); transform:rotate(-15deg); }
+    .swipe-badge--nope { right:20px; color:var(--danger);  border-color:var(--danger);  transform:rotate(15deg); }
     .swipe-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius-lg); overflow: hidden; width: 100%;
-      cursor: grab; will-change: transform; box-shadow: var(--shadow);
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:var(--radius-lg); overflow:hidden; width:100%;
+      cursor:grab; will-change:transform; box-shadow:var(--shadow);
     }
-    .swipe-card:active { cursor: grabbing; }
+    .swipe-card:active { cursor:grabbing; }
     .swipe-card__img {
       width:100%; height:320px;
-      background: linear-gradient(160deg, var(--surface2) 0%, #1e1e1e 100%);
+      background:linear-gradient(160deg, var(--surface2) 0%, #1e1e1e 100%);
       display:flex; align-items:flex-end; padding:20px; position:relative;
-      background-size: cover; background-position: center;
+      background-size:cover; background-position:center;
     }
     .swipe-card__img::after {
       content:''; position:absolute; inset:0;
-      background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 50%);
+      background:linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 50%);
     }
     .swipe-card__title { font-family:var(--font-disp); font-size:22px; position:relative; z-index:1; }
     .swipe-card__body  { padding:16px 20px 20px; display:flex; flex-direction:column; gap:10px; }
@@ -104,10 +99,9 @@ const POLLING_INTERVAL = 4000; // ms entre consultas cuando espera nuevos filtro
     .swipe-btn {
       width:60px; height:60px; border-radius:50%;
       border:2px solid var(--border); background:var(--surface);
-      cursor:pointer; font-size:22px;
-      display:flex; align-items:center; justify-content:center;
-      transition: transform var(--transition), border-color var(--transition),
-                  background var(--transition), opacity var(--transition);
+      cursor:pointer; font-size:22px; display:flex; align-items:center; justify-content:center;
+      transition:transform var(--transition), border-color var(--transition),
+                 background var(--transition), opacity var(--transition);
     }
     .swipe-btn:hover:not(:disabled) { transform:scale(1.1); }
     .swipe-btn--reject:hover:not(:disabled)  { border-color:var(--danger);  background:rgba(224,85,85,.1); }
@@ -117,28 +111,27 @@ const POLLING_INTERVAL = 4000; // ms entre consultas cuando espera nuevos filtro
     .swipe-btn:disabled { opacity:.35; cursor:not-allowed; }
     .swipe-hint { text-align:center; font-size:12px; color:var(--text-sub); margin-top:14px; opacity:.7; }
 
-    /* Skeleton shimmer */
     .skeleton {
-      background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.4s infinite;
-      border-radius: var(--radius);
+      background:linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%);
+      background-size:200% 100%; animation:shimmer 1.4s infinite; border-radius:var(--radius);
     }
-    @keyframes shimmer { to { background-position: -200% 0; } }
+    @keyframes shimmer { to { background-position:-200% 0; } }
 
-    /* Waiting dots */
-    .waiting-dots span {
-      display: inline-block;
-      width: 7px; height: 7px; border-radius: 50%;
-      background: var(--accent);
-      margin: 0 3px;
-      animation: bounce 1.4s ease-in-out infinite;
+    .waiting-card {
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:var(--radius-lg); padding:32px 24px;
+      display:flex; flex-direction:column; align-items:center; gap:16px; text-align:center;
     }
-    .waiting-dots span:nth-child(2) { animation-delay: .2s; }
-    .waiting-dots span:nth-child(3) { animation-delay: .4s; }
-    @keyframes bounce {
-      0%, 80%, 100% { opacity:.25; transform:scale(.8); }
-      40%           { opacity:1;   transform:scale(1); }
+    .waiting-dots { display:flex; gap:8px; }
+    .waiting-dot  {
+      width:10px; height:10px; border-radius:50%; background:var(--accent);
+      animation:dot-pulse 1.4s ease-in-out infinite;
+    }
+    .waiting-dot:nth-child(2) { animation-delay:.2s; }
+    .waiting-dot:nth-child(3) { animation-delay:.4s; }
+    @keyframes dot-pulse {
+      0%,80%,100% { opacity:.25; transform:scale(.8); }
+      40%         { opacity:1;   transform:scale(1); }
     }
   `],
   template: `
@@ -198,8 +191,7 @@ const POLLING_INTERVAL = 4000; // ms entre consultas cuando espera nuevos filtro
           <div class="session-bar">
             <div class="session-dot"
                  [style.background]="chatSvc.companeroDesconectado()
-                   ? 'var(--danger)' : 'var(--success)'">
-            </div>
+                   ? 'var(--danger)' : 'var(--success)'"></div>
             <span style="font-size:13px; color:var(--text-sub);">
               Sala {{ state.sala()?.codigo ?? '...' }} -
               @if (chatSvc.companeroDesconectado()) {
@@ -210,7 +202,7 @@ const POLLING_INTERVAL = 4000; // ms entre consultas cuando espera nuevos filtro
             </span>
           </div>
 
-          <!-- ── Recuperando catálogo tras recarga ── -->
+          <!-- ── Recuperando catálogo (skeleton) ── -->
           @if (recuperando()) {
             <div style="display:flex; flex-direction:column; gap:16px; align-items:center; padding:20px 0;">
               <div style="width:100%; max-width:340px;">
@@ -226,13 +218,72 @@ const POLLING_INTERVAL = 4000; // ms entre consultas cuando espera nuevos filtro
             </div>
           }
 
-          <!-- ── Error al recuperar ── -->
-          @if (errorRecuperacion()) {
-            <div style="text-align:center; padding:40px 0; color:var(--text-sub);">
-              <p style="color:var(--danger); font-weight:500; margin-bottom:8px;">
-                No se pudo cargar el catalogo
+          <!-- ── 204: creador aún no aplicó filtros ── -->
+          @if (estadoCatalogo() === 'sin-filtros') {
+            <div class="waiting-card">
+              <div class="waiting-dots">
+                <span class="waiting-dot"></span>
+                <span class="waiting-dot"></span>
+                <span class="waiting-dot"></span>
+              </div>
+              <p style="font-weight:500;">Esperando al creador de la sala...</p>
+              <p style="font-size:13px; color:var(--text-sub); max-width:280px; line-height:1.6;">
+                Tu compañero aún no ha aplicado los filtros.
+                El catálogo cargará automáticamente cuando lo haga.
               </p>
-              <p style="font-size:13px; margin-bottom:24px;">{{ errorRecuperacion() }}</p>
+              <button class="btn btn--ghost btn--sm" (click)="finalizar()">
+                Cancelar y salir
+              </button>
+            </div>
+          }
+
+          <!-- ── 200 + []: filtros sin resultados ── -->
+          @if (estadoCatalogo() === 'sin-resultados') {
+            <div class="waiting-card">
+
+              @if (state.esCreador()) {
+                <!-- Creador: fue él quien aplicó los filtros sin resultados -->
+                <p style="font-weight:500;">Sin resultados para estos filtros</p>
+                <p style="font-size:13px; color:var(--text-sub); max-width:280px; line-height:1.6;">
+                  La combinacion de filtros que elegiste no encontro contenido disponible.
+                  Prueba con otra combinacion.
+                </p>
+                <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
+                  <a routerLink="/filtros" class="btn btn--primary btn--sm">Cambiar filtros</a>
+                  <button class="btn btn--ghost btn--sm" (click)="finalizar()">Finalizar sesion</button>
+                </div>
+              }
+
+              @if (!state.esCreador()) {
+                <!-- Invitado: espera que el creador cambie los filtros -->
+                <div class="waiting-dots">
+                  <span class="waiting-dot"></span>
+                  <span class="waiting-dot"></span>
+                  <span class="waiting-dot"></span>
+                </div>
+                <p style="font-weight:500;">Sin resultados para los filtros actuales</p>
+                <p style="font-size:13px; color:var(--text-sub); max-width:280px; line-height:1.6;">
+                  Los filtros aplicados no encontraron contenido disponible.
+                  Esperando a que tu companero elija otra combinacion.
+                </p>
+                <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
+                  <a routerLink="/matches" class="btn btn--ghost btn--sm">Ver matches</a>
+                  <button class="btn btn--ghost btn--sm" (click)="finalizar()">Finalizar sesion</button>
+                </div>
+              }
+
+            </div>
+          }
+
+          <!-- ── Error de red ── -->
+          @if (estadoCatalogo() === 'error-red') {
+            <div style="text-align:center; padding:40px 0;">
+              <p style="color:var(--danger); font-weight:500; margin-bottom:8px;">
+                No se pudo conectar con el servidor
+              </p>
+              <p style="font-size:13px; color:var(--text-sub); margin-bottom:24px;">
+                Verifica tu conexion e intenta de nuevo.
+              </p>
               <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
                 <button class="btn btn--primary btn--sm" (click)="recuperarCatalogo()">Reintentar</button>
                 <button class="btn btn--ghost btn--sm"   (click)="finalizar()">Finalizar sesion</button>
@@ -240,51 +291,64 @@ const POLLING_INTERVAL = 4000; // ms entre consultas cuando espera nuevos filtro
             </div>
           }
 
-          <!-- ── Esperando nuevos filtros del creador ── -->
-          @if (!recuperando() && !errorRecuperacion() && esperandoFiltros()) {
-            <div style="text-align:center; padding:40px 0; display:flex; flex-direction:column;
-                        align-items:center; gap:20px; color:var(--text-sub);">
-              <div class="waiting-dots">
-                <span></span><span></span><span></span>
-              </div>
-              <p style="font-weight:500; color:var(--text);">Catalogo evaluado</p>
-              <p style="font-size:13px; max-width:260px; line-height:1.6;">
-                Esperando que tu companero aplique nuevos filtros para continuar...
-              </p>
-              <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
-                <a routerLink="/matches" class="btn btn--ghost btn--sm">Ver matches</a>
-                <button class="btn btn--ghost btn--sm" (click)="finalizar()">Finalizar sesion</button>
-              </div>
-            </div>
-          }
+          <!-- ── Catálogo agotado ── -->
+          @if (!recuperando() && estadoCatalogo() === 'ok' && !state.hayMas()) {
 
-          <!-- ── Catálogo vacío y NO es el segundo usuario esperando ── -->
-          @if (!recuperando() && !errorRecuperacion() && !esperandoFiltros() && !state.hayMas()) {
-            <div style="text-align:center; padding:40px 0; color:var(--text-sub);">
-              <p style="font-weight:500; margin-bottom:8px;">Has evaluado todo el catalogo!</p>
-              @if (state.esCreador()) {
+            @if (state.esCreador()) {
+              <div style="text-align:center; padding:40px 0; color:var(--text-sub);">
+                <p style="font-weight:500; margin-bottom:8px;">Has evaluado todo el catalogo!</p>
                 <p style="font-size:13px; margin-bottom:24px;">
-                  Cambia los filtros para seguir descubriendo contenido.
+                  Cambia los filtros para seguir descubriendo contenido juntos, o finaliza la sesion.
                 </p>
                 <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
                   <a routerLink="/filtros" class="btn btn--primary btn--sm">Cambiar filtros</a>
                   <a routerLink="/matches" class="btn btn--ghost btn--sm">Ver matches</a>
                   <button class="btn btn--ghost btn--sm" (click)="finalizar()">Finalizar</button>
                 </div>
-              } @else {
-                <p style="font-size:13px; margin-bottom:24px;">
-                  Revisa tus matches o finaliza la sesion.
-                </p>
-                <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
-                  <a routerLink="/matches" class="btn btn--ghost btn--sm">Ver matches</a>
-                  <button class="btn btn--primary btn--sm" (click)="finalizar()">Finalizar</button>
-                </div>
-              }
-            </div>
+              </div>
+            }
+
+            @if (!state.esCreador()) {
+              <div class="waiting-card">
+                @if (!esperandoFiltros()) {
+                  <p style="font-weight:500; font-size:16px;">Has evaluado todo el catalogo!</p>
+                  <p style="font-size:13px; color:var(--text-sub); max-width:280px; line-height:1.6;">
+                    Tu compañero puede cambiar los filtros para seguir.
+                    ¿Quieres esperar a que lo haga?
+                  </p>
+                  <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
+                    <button class="btn btn--primary btn--sm" (click)="iniciarEsperaFiltros()">
+                      Esperar filtros nuevos
+                    </button>
+                    <a routerLink="/matches" class="btn btn--ghost btn--sm">Ver matches</a>
+                    <button class="btn btn--ghost btn--sm" (click)="finalizar()">Finalizar</button>
+                  </div>
+                }
+                @if (esperandoFiltros()) {
+                  <div class="waiting-dots">
+                    <span class="waiting-dot"></span>
+                    <span class="waiting-dot"></span>
+                    <span class="waiting-dot"></span>
+                  </div>
+                  <p style="font-weight:500;">Esperando filtros nuevos...</p>
+                  <p style="font-size:13px; color:var(--text-sub); max-width:280px; line-height:1.6;">
+                    Cuando tu compañero aplique nuevos filtros,
+                    el catalogo se actualizara automaticamente.
+                  </p>
+                  <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
+                    <a routerLink="/matches" class="btn btn--ghost btn--sm"
+                       (click)="detenerEsperaFiltros()">
+                      Ver matches
+                    </a>
+                    <button class="btn btn--ghost btn--sm" (click)="finalizar()">Finalizar</button>
+                  </div>
+                }
+              </div>
+            }
           }
 
           <!-- ── Swipe normal ── -->
-          @if (!recuperando() && !errorRecuperacion() && !esperandoFiltros() && state.hayMas() && state.actual(); as c) {
+          @if (!recuperando() && estadoCatalogo() === 'ok' && state.hayMas() && state.actual(); as c) {
 
             <div class="card-wrapper"
                  #cardWrapper
@@ -321,24 +385,19 @@ const POLLING_INTERVAL = 4000; // ms entre consultas cuando espera nuevos filtro
                       [class.active]="dragDir() === -1"
                       title="Rechazar"
                       [disabled]="evaluando() || chatSvc.companeroDesconectado() || !chatSvc.conectado()"
-                      (click)="evaluar(false)">
-                &#10007;
-              </button>
+                      (click)="evaluar(false)">&#10007;</button>
               <button class="swipe-btn swipe-btn--approve"
                       [class.active]="dragDir() === 1"
                       title="Aprobar"
                       [disabled]="evaluando() || chatSvc.companeroDesconectado() || !chatSvc.conectado()"
-                      (click)="evaluar(true)">
-                &#10003;
-              </button>
+                      (click)="evaluar(true)">&#10003;</button>
             </div>
 
             <p class="swipe-hint">Arrastra la tarjeta o usa los botones</p>
 
             @if (chatSvc.companeroDesconectado()) {
-              <p style="text-align:center; font-size:12px; color:var(--danger);
-                        margin-top:16px; display:flex; align-items:center;
-                        justify-content:center; gap:6px;">
+              <p style="text-align:center; font-size:12px; color:var(--danger); margin-top:16px;
+                        display:flex; align-items:center; justify-content:center; gap:6px;">
                 Evaluaciones pausadas hasta que {{ chatSvc.nombreCompanero() }} regrese
               </p>
             }
@@ -354,11 +413,9 @@ const POLLING_INTERVAL = 4000; // ms entre consultas cuando espera nuevos filtro
         <span style="display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text-sub);">
           Movie data provided by
           <a href="https://www.themoviedb.org" target="_blank" rel="noopener"
-             style="display:inline-flex; align-items:center; gap:4px;
-                    color:var(--text-sub); text-decoration:none;">
+             style="display:inline-flex; align-items:center; gap:4px; color:var(--text-sub); text-decoration:none;">
             <img src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb20f684adbe4ce1d0bf14f3bf3543b63.svg"
-                 alt="TMDb" height="12"
-                 style="height:12px; opacity:.6; filter:grayscale(1);">
+                 alt="TMDb" height="12" style="height:12px; opacity:.6; filter:grayscale(1);">
           </a>
         </span>
         <span style="font-size:11px; color:var(--border);">|</span>
@@ -368,7 +425,6 @@ const POLLING_INTERVAL = 4000; // ms entre consultas cuando espera nuevos filtro
              style="color:var(--text-sub); text-decoration:underline;">JustWatch</a>
         </span>
       </footer>
-
     </div>
   `
 })
@@ -379,24 +435,27 @@ export class SwipeComponent implements OnInit, OnDestroy {
   @ViewChild('badgeLike')   badgeLikeEl!: ElementRef<HTMLDivElement>;
   @ViewChild('badgeNope')   badgeNopeEl!: ElementRef<HTMLDivElement>;
 
-  evaluando         = signal(false);
-  nuevoMatch        = signal('');
-  recuperando       = signal(false);
-  errorRecuperacion = signal('');
+  evaluando        = signal(false);
+  nuevoMatch       = signal('');
+  recuperando      = signal(false);
+  esperandoFiltros = signal(false);
+  dragDir          = signal(0);
+
   /**
-   * true cuando el segundo usuario agotó el catálogo actual y está
-   * esperando que el creador aplique nuevos filtros.
+   * Estado del catálogo:
+   *  'idle'          → inicial, aún no se consultó
+   *  'sin-filtros'   → 204: el creador no aplicó filtros (polling activo)
+   *  'sin-resultados'→ 200 + []: filtros sin resultados
+   *  'error-red'     → error HTTP
+   *  'ok'            → catálogo cargado
    */
-  esperandoFiltros  = signal(false);
-  dragDir           = signal(0);
+  estadoCatalogo = signal<'idle' | 'sin-filtros' | 'sin-resultados' | 'error-red' | 'ok'>('idle');
 
   private usuarioId         = 0;
   private matchesAnteriores = 0;
-  private readonly evaluados = new Set<string>();
 
-  // Subject que cancela el polling cuando el componente se destruye
-  // o cuando llega un catálogo nuevo
-  private readonly stopPolling$ = new Subject<void>();
+  private readonly stopPoll$  = new Subject<void>();
+  private readonly evaluados  = new Set<string>();
 
   // - Drag state -
   private dragging  = false;
@@ -447,97 +506,111 @@ export class SwipeComponent implements OnInit, OnDestroy {
     this.chatSvc.conectar(salaId, token, this.usuarioId);
     this.matchesAnteriores = this.chatSvc.matches().length;
 
-    // Si el catálogo está vacío (recarga de página), recuperarlo del backend
     if (this.state.contenido().length === 0) {
       this.recuperarCatalogo();
+    } else {
+      this.estadoCatalogo.set('ok');
     }
   }
 
   ngOnDestroy(): void {
     if (this.rafId) cancelAnimationFrame(this.rafId);
-    this.stopPolling$.next();
-    this.stopPolling$.complete();
+    this.stopPoll$.next();
+    this.stopPoll$.complete();
   }
 
   // ─────────────────────────────────────────────────────
-  // Recuperación inicial (recarga de página)
+  // Recuperación de catálogo
   // ─────────────────────────────────────────────────────
 
-  /**
-   * Llama a GET /api/filtros/{salaId} una sola vez para recuperar
-   * el catálogo tras una recarga. Reanuda desde el índice guardado
-   * en localStorage sin resetearlo.
-   */
   recuperarCatalogo(): void {
     const salaId = this.state.salaId()!;
     this.recuperando.set(true);
-    this.errorRecuperacion.set('');
+    this.estadoCatalogo.set('idle');
 
     this.salaSvc.getFiltros(salaId).subscribe({
-      next: (contenido) => {
-        if (!contenido || contenido.length === 0) {
-          this.errorRecuperacion.set(
-              'El catálogo todavía no está listo. Pide a tu compañero que aplique los filtros.'
-          );
-        } else {
-          this.state.reanudarContenido(contenido);
-        }
+      next: (resultado) => {
         this.recuperando.set(false);
+
+        if (resultado === 'sin-filtros') {
+          // 204: el creador aún no aplicó filtros → mostrar espera con polling
+          this.estadoCatalogo.set('sin-filtros');
+          this.iniciarPollingFiltrosIniciales();
+
+        } else if (resultado === 'sin-resultados') {
+          // 200 + []: filtros aplicados pero sin contenido
+          this.estadoCatalogo.set('sin-resultados');
+
+        } else {
+          // 200 + contenido: catálogo listo
+          this.state.reanudarContenido(resultado);
+          this.estadoCatalogo.set('ok');
+        }
       },
       error: () => {
-        this.errorRecuperacion.set(
-            'No se pudo conectar con el servidor. Verifica tu conexión e intenta de nuevo.'
-        );
         this.recuperando.set(false);
+        this.estadoCatalogo.set('error-red');
+      }
+    });
+  }
+
+  /**
+   * Polling silencioso cuando el creador aún no aplicó filtros (204).
+   * Consulta cada POLL_INTERVAL_MS hasta que llegue contenido.
+   */
+  private iniciarPollingFiltrosIniciales(): void {
+    const salaId = this.state.salaId()!;
+
+    interval(POLL_INTERVAL_MS).pipe(
+        switchMap(() => this.salaSvc.getFiltros(salaId)),
+        takeUntil(this.stopPoll$)
+    ).subscribe({
+      next: (resultado) => {
+        if (resultado === 'sin-filtros' || resultado === 'sin-resultados') return;
+
+        // Llegó contenido → detener polling y cargar
+        this.stopPoll$.next();
+        this.ngZone.run(() => {
+          this.state.reanudarContenido(resultado);
+          this.estadoCatalogo.set('ok');
+        });
       }
     });
   }
 
   // ─────────────────────────────────────────────────────
-  // Polling de nuevos filtros (segundo usuario espera al creador)
+  // Polling de filtros nuevos (catálogo agotado)
   // ─────────────────────────────────────────────────────
 
-  /**
-   * Inicia un polling cada POLLING_INTERVAL ms llamando a
-   * GET /api/filtros/{salaId}. Cuando el backend devuelve un catálogo
-   * diferente al actual (el creador aplicó nuevos filtros), lo carga
-   * y detiene el polling automáticamente.
-   *
-   * Solo debe llamarse cuando !esCreador() y !hayMas().
-   */
-  private iniciarPollingFiltros(): void {
-    const salaId          = this.state.salaId()!;
-    const contenidoActual = this.state.contenido();
-
+  iniciarEsperaFiltros(): void {
+    const salaId     = this.state.salaId()!;
+    const idsActuales = new Set(this.state.contenido().map(c => c.contenidoId));
     this.esperandoFiltros.set(true);
 
-    interval(POLLING_INTERVAL).pipe(
+    interval(POLL_INTERVAL_MS).pipe(
         switchMap(() => this.salaSvc.getFiltros(salaId)),
-        takeUntil(this.stopPolling$)
+        takeUntil(this.stopPoll$)
     ).subscribe({
-      next: (contenido) => {
-        if (!contenido || contenido.length === 0) return; // sigue esperando
+      next: (resultado) => {
+        if (resultado === 'sin-filtros' || resultado === 'sin-resultados') return;
 
-        // Detectar si es un catálogo NUEVO comparando el primer contenidoId
-        const esMismoCatalogo =
-            contenido.length === contenidoActual.length &&
-            contenido[0]?.contenidoId === contenidoActual[0]?.contenidoId;
+        const hayNuevo = resultado.some(c => !idsActuales.has(c.contenidoId));
+        if (!hayNuevo) return;
 
-        if (!esMismoCatalogo) {
-          // Llegó un catálogo nuevo → detener polling y cargar
-          this.stopPolling$.next();
-          this.ngZone.run(() => {
-            this.state.setContenido(contenido); // reset índice a 0 con filtros nuevos
-            this.evaluados.clear();              // limpiar evaluaciones anteriores
-            this.esperandoFiltros.set(false);
-          });
-        }
-        // Si es el mismo catálogo, el polling sigue
-      },
-      error: () => {
-        // Errores de red no detienen el polling, reintenta en el próximo tick
+        this.stopPoll$.next();
+        this.ngZone.run(() => {
+          this.esperandoFiltros.set(false);
+          this.evaluados.clear();
+          this.state.setContenido(resultado);
+          this.estadoCatalogo.set('ok');
+        });
       }
     });
+  }
+
+  detenerEsperaFiltros(): void {
+    this.stopPoll$.next();
+    this.esperandoFiltros.set(false);
   }
 
   // ─────────────────────────────────────────────────────
@@ -553,21 +626,15 @@ export class SwipeComponent implements OnInit, OnDestroy {
     this.startY    = e.clientY;
     this.currentX  = 0;
     this.cardWidth = this.wrapperEl?.nativeElement.offsetWidth || 340;
-
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     this.setCardTransition('none');
   }
 
   onPointerMove(e: PointerEvent): void {
     if (!this.dragging) return;
-
     const dx = e.clientX - this.startX;
     const dy = e.clientY - this.startY;
-
-    if (Math.abs(dy) > Math.abs(dx) * 1.5 && Math.abs(dx) < 12) {
-      this.cancelDrag();
-      return;
-    }
+    if (Math.abs(dy) > Math.abs(dx) * 1.5 && Math.abs(dx) < 12) { this.cancelDrag(); return; }
 
     this.currentX = dx;
     this.dragDir.set(dx > 0 ? 1 : -1);
@@ -581,18 +648,12 @@ export class SwipeComponent implements OnInit, OnDestroy {
   onPointerUp(_e: PointerEvent): void {
     if (!this.dragging) return;
     this.dragging = false;
-
     const ratio = this.currentX / this.cardWidth;
-    if (Math.abs(ratio) >= THRESHOLD) {
-      this.commitSwipe(this.currentX > 0);
-    } else {
-      this.snapBack();
-    }
+    if (Math.abs(ratio) >= THRESHOLD) { this.commitSwipe(this.currentX > 0); }
+    else { this.snapBack(); }
   }
 
-  onPointerCancel(_e: PointerEvent): void {
-    this.cancelDrag();
-  }
+  onPointerCancel(_e: PointerEvent): void { this.cancelDrag(); }
 
   // ─────────────────────────────────────────────────────
   // Drag visuals
@@ -605,12 +666,9 @@ export class SwipeComponent implements OnInit, OnDestroy {
     if (!card) return;
 
     const ratio   = dx / this.cardWidth;
-    const rotate  = ratio * MAX_ROTATE;
-    card.style.transform = `translateX(${dx}px) rotate(${rotate}deg)`;
+    card.style.transform = `translateX(${dx}px) rotate(${ratio * MAX_ROTATE}deg)`;
 
-    const progress = (Math.abs(ratio) - BADGE_START) / (1 - BADGE_START);
-    const opacity  = Math.max(0, Math.min(1, progress));
-
+    const opacity = Math.max(0, Math.min(1, (Math.abs(ratio) - BADGE_START) / (1 - BADGE_START)));
     if (dx > 0) {
       if (likeBadge) likeBadge.style.opacity = String(opacity);
       if (nopeBadge) nopeBadge.style.opacity = '0';
@@ -622,16 +680,12 @@ export class SwipeComponent implements OnInit, OnDestroy {
 
   private commitSwipe(approved: boolean): void {
     if (this.evaluando()) return;
-
     this.committed = true;
     const card = this.cardEl?.nativeElement;
     if (!card) { this.finishEval(approved); return; }
 
-    const flyX   = approved ?  FLY_DIST : -FLY_DIST;
-    const rotate = approved ?  MAX_ROTATE : -MAX_ROTATE;
-
     this.setCardTransition('transform .35s cubic-bezier(.5,1.4,.5,1), opacity .3s ease');
-    card.style.transform = `translateX(${flyX}px) rotate(${rotate}deg)`;
+    card.style.transform = `translateX(${approved ? FLY_DIST : -FLY_DIST}px) rotate(${approved ? MAX_ROTATE : -MAX_ROTATE}deg)`;
     card.style.opacity   = '0';
 
     setTimeout(() => {
@@ -655,25 +709,18 @@ export class SwipeComponent implements OnInit, OnDestroy {
     if (nopeBadge) nopeBadge.style.opacity = '0';
   }
 
-  private cancelDrag(): void {
-    this.dragging = false;
-    this.snapBack();
-  }
+  private cancelDrag(): void { this.dragging = false; this.snapBack(); }
 
-  private setCardTransition(value: string): void {
+  private setCardTransition(v: string): void {
     const card = this.cardEl?.nativeElement;
-    if (card) card.style.transition = value;
+    if (card) card.style.transition = v;
   }
 
   private resetCard(): void {
     const card      = this.cardEl?.nativeElement;
     const likeBadge = this.badgeLikeEl?.nativeElement;
     const nopeBadge = this.badgeNopeEl?.nativeElement;
-    if (card) {
-      card.style.transform  = '';
-      card.style.opacity    = '';
-      card.style.transition = '';
-    }
+    if (card) { card.style.transform = ''; card.style.opacity = ''; card.style.transition = ''; }
     if (likeBadge) likeBadge.style.opacity = '0';
     if (nopeBadge) nopeBadge.style.opacity = '0';
   }
@@ -682,9 +729,7 @@ export class SwipeComponent implements OnInit, OnDestroy {
   // Business logic
   // ─────────────────────────────────────────────────────
 
-  private finishEval(approved: boolean): void {
-    this.evaluar(approved);
-  }
+  private finishEval(approved: boolean): void { this.evaluar(approved); }
 
   evaluar(decision: boolean): void {
     const contenido = this.state.actual();
@@ -701,44 +746,19 @@ export class SwipeComponent implements OnInit, OnDestroy {
     this.evaluados.add(contenido.contenidoId);
     this.evaluando.set(true);
 
-    this.evalSvc.evaluar({
-      salaId,
-      usuarioId:   this.usuarioId,
-      contenidoId: contenido.contenidoId,
-      decision
-    }).subscribe({
-      next: () => {
-        this.state.avanzar();
-        this.evaluando.set(false);
-        // Si el segundo usuario acaba el catálogo → iniciar polling
-        this.checkCatalogoAgotado();
-      },
-      error: (err) => {
-        if (err.status === 409) {
-          this.state.avanzar();
-        } else {
-          this.evaluados.delete(contenido.contenidoId);
-          this.state.avanzar();
-        }
-        this.evaluando.set(false);
-        this.checkCatalogoAgotado();
-      }
-    });
-  }
-
-  /**
-   * Llamado después de cada evaluación.
-   * Si el catálogo se agotó y el usuario actual es el invitado (no creador),
-   * inicia el polling para detectar cuando el creador aplique nuevos filtros.
-   */
-  private checkCatalogoAgotado(): void {
-    if (!this.state.hayMas() && !this.state.esCreador() && !this.esperandoFiltros()) {
-      this.iniciarPollingFiltros();
-    }
+    this.evalSvc.evaluar({ salaId, usuarioId: this.usuarioId, contenidoId: contenido.contenidoId, decision })
+        .subscribe({
+          next: () => { this.state.avanzar(); this.evaluando.set(false); },
+          error: (err) => {
+            if (err.status !== 409) this.evaluados.delete(contenido.contenidoId);
+            this.state.avanzar();
+            this.evaluando.set(false);
+          }
+        });
   }
 
   finalizar(): void {
-    this.stopPolling$.next(); // detener polling si estaba activo
+    this.stopPoll$.next();
     const salaId = this.state.salaId();
     if (!salaId) { this.router.navigate(['/home']); return; }
     this.salaSvc.finalizar(salaId).subscribe({
