@@ -163,7 +163,14 @@ const POLL_INTERVAL_MS = 4000;
         <div class="navbar__actions">
           <a routerLink="/matches" class="btn btn--ghost btn--sm">Matches</a>
           <a routerLink="/chat"    class="btn btn--ghost btn--sm">Chat</a>
-          <button class="btn btn--danger btn--sm" (click)="finalizar()">Finalizar</button>
+          <button class="btn btn--danger btn--sm"
+                  (click)="state.esCreador() && finalizar()"
+                  [disabled]="!state.esCreador()"
+                  [title]="!state.esCreador() ? 'Solo quien creó la sala puede finalizarla' : ''"
+                  [style.opacity]="!state.esCreador() ? '0.4' : '1'"
+                  [style.cursor]="!state.esCreador() ? 'not-allowed' : 'pointer'">
+            Finalizar
+          </button>
         </div>
       </nav>
 
