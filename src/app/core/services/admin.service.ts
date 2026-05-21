@@ -57,6 +57,11 @@ export class PlataformasService {
   setEstado(id: number, habilitada: boolean): Observable<void> {
     return this.http.put<void>(`${this.base}/estado`, { id, habilitada });
   }
+
+  // En PlataformasService
+  estaEnUso(id: number): Observable<boolean> {
+    return this.http.get<boolean>(`${this.base}/${id}/en-uso`);
+  }
 }
 
 // ── Retroalimentación ─────────────────────────────────

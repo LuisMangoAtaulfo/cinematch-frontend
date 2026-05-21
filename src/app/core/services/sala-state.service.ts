@@ -113,6 +113,13 @@ export class SalaStateService {
     localStorage.removeItem(LS_IDX_KEY);
   }
 
+  resetContenido(): void {
+    this._contenido.set([]);
+    this._indice.set(0);
+    this._matches.set([]);
+    localStorage.removeItem(LS_IDX_KEY);
+  }
+
   // ── Helpers localStorage ──────────────────────────────
   private leerSalaLS(): Sala | null {
     try {

@@ -11,6 +11,7 @@ import { EvaluacionesService } from '../../core/services/evaluaciones.service';
 import { SalaService }         from '../../core/services/sala.service';
 import { AuthService }         from '../../core/services/auth.service';
 import { Usuario }             from '../../core/models';
+import {InactividadService} from "../../core/services/inactividad.service";
 
 const THRESHOLD        = 0.30;
 const MAX_ROTATE       = 18;
@@ -180,6 +181,25 @@ const POLL_INTERVAL_MS = 4000;
       @if (nuevoMatch()) {
         <div class="match-banner" (click)="nuevoMatch.set('')">
           Match! {{ nuevoMatch() }}
+        </div>
+      }
+      @if (avisoCierre()) {
+        <div style="background:var(--surface2); border-bottom:1px solid var(--danger);
+              padding:12px 24px; display:flex; align-items:center;
+              justify-content:space-between; gap:12px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+      <span style="width:8px; height:8px; border-radius:50%;
+                   background:var(--danger); display:inline-block;
+                   animation: pulse 1s ease-in-out infinite;"></span>
+            <span style="font-size:13px; color:var(--text);">
+        La sesión se cerrará por inactividad en
+        <strong style="color:var(--danger);">{{ cuentaAtras() }}s</strong>
+      </span>
+          </div>
+          <button class="btn btn--ghost btn--sm" style="border-color:var(--danger); color:var(--danger);"
+                  (click)="descartarAviso()">
+            Seguir aquí
+          </button>
         </div>
       }
 
@@ -440,6 +460,8 @@ export class SwipeComponent implements OnInit, OnDestroy {
   recuperando      = signal(false);
   esperandoFiltros = signal(false);
   dragDir          = signal(0);
+  avisoCierre  = signal(false);
+  cuentaAtras  = signal(30);
 
   /**
    * Estado del catálogo:
@@ -451,6 +473,7 @@ export class SwipeComponent implements OnInit, OnDestroy {
    */
   estadoCatalogo = signal<'idle' | 'sin-filtros' | 'sin-resultados' | 'error-red' | 'ok'>('idle');
 
+  private cuentaInterval: ReturnType<typeof setInterval> | null = null;
   private usuarioId         = 0;
   private matchesAnteriores = 0;
 
@@ -473,7 +496,8 @@ export class SwipeComponent implements OnInit, OnDestroy {
       private salaSvc: SalaService,
       private auth:    AuthService,
       private router:  Router,
-      private ngZone:  NgZone
+      private ngZone:  NgZone,
+      private inactividad: InactividadService
   ) {
     effect(() => {
       const matches = this.chatSvc.matches();
@@ -511,12 +535,50 @@ export class SwipeComponent implements OnInit, OnDestroy {
     } else {
       this.estadoCatalogo.set('ok');
     }
+
+    this.inactividad.iniciar();
+
+    this.inactividad.inactivo$.pipe(
+        takeUntil(this.stopPoll$)
+    ).subscribe(() => {
+      this.limpiarCuenta();
+      this.finalizar();
+    });
+
+    this.inactividad.aviso$.pipe(
+        takeUntil(this.stopPoll$)
+    ).subscribe((mostrar) => {
+      this.avisoCierre.set(mostrar);
+      if (mostrar) {
+        this.cuentaAtras.set(30);
+        this.cuentaInterval = setInterval(() => {
+          const resto = this.cuentaAtras() - 1;
+          if (resto <= 0) { this.limpiarCuenta(); return; }
+          this.cuentaAtras.set(resto);
+        }, 1000);
+      } else {
+        this.limpiarCuenta();
+      }
+    });
+  }
+  private limpiarCuenta(): void {
+    if (this.cuentaInterval) {
+      clearInterval(this.cuentaInterval);
+      this.cuentaInterval = null;
+    }
+    this.avisoCierre.set(false);
+  }
+
+  descartarAviso(): void {
+    this.inactividad.iniciar(); // reinicia todos los timers
   }
 
   ngOnDestroy(): void {
     if (this.rafId) cancelAnimationFrame(this.rafId);
     this.stopPoll$.next();
     this.stopPoll$.complete();
+    this.inactividad.detener();
+    this.limpiarCuenta();// ← nuevo
   }
 
   // ─────────────────────────────────────────────────────

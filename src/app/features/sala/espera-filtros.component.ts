@@ -109,14 +109,13 @@ export class EsperaFiltrosComponent implements OnInit, OnDestroy {
             switchMap(() => this.salaSvc.getFiltros(salaId)),
             takeUntil(this.destroy$)
         ).subscribe({
-            next: (resultado) => {
-                if (resultado === 'sin-filtros' || resultado === 'sin-resultados') return;
-
-                // Tiene contenido → navegar
-                this.destroy$.next();
-                this.state.setContenido(resultado);
-                this.router.navigate(['/swipe']);
-            },
+                next: (resultado) => {
+                    if (resultado === 'sin-filtros' || resultado === 'sin-resultados') return;
+                    this.destroy$.next();
+                    this.state.resetContenido();     // ← limpia contenido/índice sin tocar la sala
+                    this.state.setContenido(resultado);
+                    this.router.navigate(['/swipe']);
+                },
             error: () => {
                 // Error de red: el interval reintentará en el próximo tick
             }

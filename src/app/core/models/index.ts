@@ -81,6 +81,7 @@ export interface FiltrosRequest {
   tipo?: TipoContenido;
   genero?: GeneroContenido;
   plataforma?: string;
+  anio?: number;
 }
 
 // ── Evaluaciones ──────────────────────────────────────

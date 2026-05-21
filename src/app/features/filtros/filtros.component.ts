@@ -62,6 +62,15 @@ import { GeneroContenido, TipoContenido, Plataforma } from '../../core/models';
                   <option value="FANTASIA">Fantasía</option>
                 </select>
               </div>
+              <div class="form-group">
+                <label for="anio">Año</label>
+                <select id="anio" [(ngModel)]="anio" name="anio">
+                  <option value="">Todos</option>
+                  @for (a of anios; track a) {
+                    <option [value]="a">{{ a }}</option>
+                  }
+                </select>
+              </div>
 
               @if (error()) {
                 <p class="form-error">{{ error() }}</p>
@@ -90,10 +99,16 @@ export class FiltrosComponent implements OnInit {
   plataforma = '';
   tipo       = '';
   genero     = '';
+  anio  = '';
   cargando            = signal(false);
   cargandoPlataformas = signal(true);
   error               = signal('');
   plataformas         = signal<Plataforma[]>([]);
+  readonly anios = Array.from(
+      { length: new Date().getFullYear() - 1979 },
+      (_, i) => new Date().getFullYear() - i
+  );
+
 
   constructor(
       private filtrosSvc:    FiltrosService,
@@ -120,7 +135,8 @@ export class FiltrosComponent implements OnInit {
       salaId,
       ...(this.tipo       ? { tipo:       this.tipo      as TipoContenido }   : {}),
       ...(this.genero     ? { genero:     this.genero    as GeneroContenido } : {}),
-      ...(this.plataforma ? { plataforma: this.plataforma }                   : {})
+      ...(this.plataforma ? { plataforma: this.plataforma }                   : {}),
+      ...(this.anio       ? { anio:       Number(this.anio)} : {})
     }).subscribe({
       next: (contenido) => {
         if (!contenido.length) { /* ... ya existente */ }
