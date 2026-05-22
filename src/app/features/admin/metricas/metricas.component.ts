@@ -124,8 +124,8 @@ export class MetricasComponent implements OnInit {
         ? new Date(hastaRaw.getFullYear(), hastaRaw.getMonth(), hastaRaw.getDate() + 1)
         : null;
 
-    return lista.filter(d => {
-      const fecha = new Date(d.fecha);
+    return lista.filter(c => {
+      const fecha = this.normalizarFecha(c.fecha); // ← único cambio aquí
       if (desde && fecha < desde) return false;
       if (hasta && fecha >= hasta) return false;
       return true;
@@ -166,10 +166,19 @@ export class MetricasComponent implements OnInit {
 
   logout(): void { this.auth.logout(); }
 
-  private toDateInput(fecha: string): string {
-    const d  = new Date(fecha);
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${d.getFullYear()}-${mm}-${dd}`;
+  private toDateInput(fecha: string | Date): string {
+    const d = typeof fecha === 'string' ? this.normalizarFecha(fecha) : fecha;
+    const yyyy = d.getUTCFullYear();
+    const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd   = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   }
+
+  private normalizarFecha(fechaStr: string): Date {
+    const normalizada = fechaStr.includes('Z') || fechaStr.includes('+')
+        ? fechaStr
+        : fechaStr + 'Z';
+    return new Date(normalizada);
+  }
+
 }

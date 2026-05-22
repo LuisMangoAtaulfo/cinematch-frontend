@@ -42,24 +42,26 @@ import { DecimalPipe } from '@angular/common';
               <div class="form-group" style="flex:1; min-width:140px;">
                 <label>Desde</label>
                 <input
-                  type="date"
-                  [(ngModel)]="fechaDesde"
-                  [min]="fechaMin()"
-                  [max]="fechaHasta || fechaMax()">
+                    type="date"
+                    [value]="fechaDesde()"
+                    (change)="fechaDesde.set($any($event.target).value)"
+                    [min]="fechaMin()"
+                    [max]="fechaHasta() || fechaMax()">
               </div>
               <div class="form-group" style="flex:1; min-width:140px;">
                 <label>Hasta</label>
                 <input
-                  type="date"
-                  [(ngModel)]="fechaHasta"
-                  [min]="fechaDesde || fechaMin()"
-                  [max]="fechaMax()">
+                    type="date"
+                    [value]="fechaHasta()"
+                    (change)="fechaHasta.set($any($event.target).value)"
+                    [min]="fechaDesde() || fechaMin()"
+                    [max]="fechaMax()">
               </div>
-              @if (fechaDesde || fechaHasta) {
-                <button class="btn btn--ghost" style="height:44px;" (click)="limpiarFiltro()">
-                  Limpiar
-                </button>
-              }
+            @if (fechaDesde() || fechaHasta()) {
+              <button class="btn btn--ghost" style="height:44px;" (click)="limpiarFiltro()">
+                Limpiar
+              </button>
+            }
             </div>
 
             <!-- Sin resultados -->
@@ -81,7 +83,7 @@ import { DecimalPipe } from '@angular/common';
                   <p style="font-size:13px; color:var(--text-sub); margin-bottom:4px;">
                     Basado en <strong style="color:var(--text);">{{ calificacionesFiltradas().length }}</strong> calificaciones
                   </p>
-                  @if (fechaDesde || fechaHasta) {
+                  @if (fechaDesde() || fechaHasta()) {
                     <p style="font-size:12px; color:var(--accent); margin-top:4px;">● Filtro activo</p>
                   }
                 </div>
@@ -115,8 +117,8 @@ export class RetroalimentacionComponent implements OnInit {
   cargando       = signal(true);
   readonly valoresDesc = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 
-  fechaDesde = '';
-  fechaHasta = '';
+  fechaDesde = signal('');
+  fechaHasta = signal('');
 
   /** Fecha más antigua del dataset → mínimo seleccionable en el calendario */
   fechaMin = computed(() => {
@@ -136,17 +138,16 @@ export class RetroalimentacionComponent implements OnInit {
 
   calificacionesFiltradas = computed(() => {
     const lista    = this.calificaciones();
-    const desde    = this.fechaDesde ? new Date(this.fechaDesde) : null;
-    const hastaRaw = this.fechaHasta ? new Date(this.fechaHasta) : null;
-    // Extender "hasta" al final del día seleccionado
-    const hasta = hastaRaw
+    const desde    = this.fechaDesde() ? new Date(this.fechaDesde()) : null;
+    const hastaRaw = this.fechaHasta() ? new Date(this.fechaHasta()) : null;
+    const hasta    = hastaRaw
         ? new Date(hastaRaw.getFullYear(), hastaRaw.getMonth(), hastaRaw.getDate() + 1)
         : null;
 
     return lista.filter(c => {
-      const fecha = new Date(c.fecha);
+      const fecha = this.normalizarFecha(c.fecha); // ← único cambio aquí
       if (desde && fecha < desde) return false;
-      if (hasta  && fecha >= hasta) return false;
+      if (hasta && fecha >= hasta) return false;
       return true;
     });
   });
@@ -180,18 +181,23 @@ export class RetroalimentacionComponent implements OnInit {
   }
 
   limpiarFiltro(): void {
-    this.fechaDesde = '';
-    this.fechaHasta = '';
+    this.fechaDesde.set('');
+    this.fechaHasta.set('');
   }
 
   logout(): void { this.auth.logout(); }
 
-  /** Convierte un LocalDateTime string o Date a formato yyyy-MM-dd para input[type=date] */
   private toDateInput(fecha: string | Date): string {
-    const d    = new Date(fecha);
-    const yyyy = d.getFullYear();
-    const mm   = String(d.getMonth() + 1).padStart(2, '0');
-    const dd   = String(d.getDate()).padStart(2, '0');
+    const d = typeof fecha === 'string' ? this.normalizarFecha(fecha) : fecha;
+    const yyyy = d.getUTCFullYear();
+    const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd   = String(d.getUTCDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
+  }
+  private normalizarFecha(fechaStr: string): Date {
+    const normalizada = fechaStr.includes('Z') || fechaStr.includes('+')
+        ? fechaStr
+        : fechaStr + 'Z';
+    return new Date(normalizada);
   }
 }
