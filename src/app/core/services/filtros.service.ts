@@ -1,16 +1,20 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { Apollo } from 'apollo-angular';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { Contenido, FiltrosRequest } from '../models';
-import { environment } from '../../../environments/environment';
+import { APLICAR_FILTROS } from '../graphql/mutations';
 
 @Injectable({ providedIn: 'root' })
 export class FiltrosService {
-  private readonly base = `${environment.apiUrl}/api/filtros`;
-
-  constructor(private http: HttpClient) {}
+  constructor(private apollo: Apollo) {}
 
   aplicar(body: FiltrosRequest): Observable<Contenido[]> {
-    return this.http.post<Contenido[]>(this.base, body);
+    return this.apollo
+      .mutate<{ aplicarFiltros: Contenido[] }>({
+        mutation: APLICAR_FILTROS,
+        variables: { input: body }
+      })
+      .pipe(map(result => result.data!.aplicarFiltros));
   }
 }

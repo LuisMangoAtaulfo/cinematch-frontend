@@ -1,23 +1,27 @@
 import { Injectable, signal, computed } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { tap } from 'rxjs/operators';
+import { Apollo } from 'apollo-angular';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import {
   AuthResponse,
   LoginRequest,
   RegistroRequest, Rol,
   Usuario
 } from '../models';
-import { environment } from '../../../environments/environment';
+import {
+  LOGIN,
+  REGISTRAR,
+  LOGIN_ADMIN,
+  LOGOUT,
+  LOGOUT_ADMIN
+} from '../graphql/mutations';
 
 const TOKEN_KEY = 'cm_token';
 const USER_KEY  = 'cm_user';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private readonly base = `${environment.apiUrl}/api/auth`;
-
   // ── Signals ──────────────────────────────────────────
   private _token  = signal<string | null>(localStorage.getItem(TOKEN_KEY));
   private _usuario = signal<Partial<Usuario> | null>(
@@ -29,42 +33,78 @@ export class AuthService {
   readonly isLoggedIn = computed(() => !!this._token());
   readonly isAdmin    = computed(() => this._usuario()?.rol === 'ADMINISTRADOR');
 
-  constructor(private http: HttpClient, private router: Router) {}
+  constructor(private apollo: Apollo, private router: Router) {}
 
   // ── Registro ─────────────────────────────────────────
   registrar(body: RegistroRequest): Observable<AuthResponse> {
-    return this.http.post<AuthResponse>(`${this.base}/registrar`, body).pipe(
-      tap(res => this.persist(res))
-    );
+    return this.apollo
+      .mutate<{ registrar: AuthResponse }>({
+        mutation: REGISTRAR,
+        variables: { input: body }
+      })
+      .pipe(
+        map(result => {
+          const res = result.data!.registrar;
+          this.persist(res);
+          return res;
+        })
+      );
   }
 
   // ── Login ─────────────────────────────────────────────
   login(body: LoginRequest): Observable<AuthResponse> {
-    return this.http.post<AuthResponse>(`${this.base}/login`, body).pipe(
-      tap(res => this.persist(res))
-    );
+    return this.apollo
+      .mutate<{ login: AuthResponse }>({
+        mutation: LOGIN,
+        variables: { input: body }
+      })
+      .pipe(
+        map(result => {
+          const res = result.data!.login;
+          this.persist(res);
+          return res;
+        })
+      );
   }
-  // Login admin
+
+  // ── Login admin ───────────────────────────────────────
   loginAdmin(body: LoginRequest): Observable<AuthResponse> {
-    return this.http.post<AuthResponse>(`${this.base}/login/admin`, body).pipe(
-        tap(res => this.persist(res))
-    );
+    return this.apollo
+      .mutate<{ loginAdmin: AuthResponse }>({
+        mutation: LOGIN_ADMIN,
+        variables: { input: body }
+      })
+      .pipe(
+        map(result => {
+          const res = result.data!.loginAdmin;
+          this.persist(res);
+          return res;
+        })
+      );
   }
 
   // ── Logout ────────────────────────────────────────────
   logout(): void {
-    this.http.post(`${this.base}/logout`, {}).subscribe({
-      complete: () => this.clear(),
-      error: ()    => this.clear()
-    });
+    this.apollo
+      .mutate<{ logout: boolean }>({
+        mutation: LOGOUT
+      })
+      .subscribe({
+        complete: () => this.clear(),
+        error: () => this.clear()
+      });
   }
 
-  // ── Logout Admin ────────────────────────────────────────────
+  // ── Logout Admin ──────────────────────────────────────
   logoutAdmin(): void {
-    this.http.post(`${this.base}/logout/admin`, {}).subscribe({
-      complete: () => this.clear(),
-      error: ()    => this.clear()
-    });
+    this.apollo
+      .mutate<{ logoutAdmin: boolean }>({
+        mutation: LOGOUT_ADMIN
+      })
+      .subscribe({
+        complete: () => this.clear(),
+        error: () => this.clear()
+      });
   }
 
   // ── Helpers ───────────────────────────────────────────

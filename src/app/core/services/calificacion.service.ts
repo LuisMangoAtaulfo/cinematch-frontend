@@ -1,16 +1,20 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { Apollo } from 'apollo-angular';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { CalificacionRequest } from '../models';
-import { environment } from '../../../environments/environment';
+import { REGISTRAR_CALIFICACION } from '../graphql/mutations';
 
 @Injectable({ providedIn: 'root' })
 export class CalificacionService {
-  private readonly base = `${environment.apiUrl}/api/calificaciones`;
+  constructor(private apollo: Apollo) {}
 
-  constructor(private http: HttpClient) {}
-
-  registrar(body: CalificacionRequest): Observable<void> {
-    return this.http.post<void>(this.base, body);
+  registrar(body: CalificacionRequest): Observable<boolean> {
+    return this.apollo
+      .mutate<{ registrarCalificacion: boolean }>({
+        mutation: REGISTRAR_CALIFICACION,
+        variables: { input: body }
+      })
+      .pipe(map(result => result.data!.registrarCalificacion));
   }
 }

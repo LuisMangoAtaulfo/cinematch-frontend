@@ -1,15 +1,18 @@
 import { Injectable, signal } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { Apollo } from 'apollo-angular';
 import { Observable } from 'rxjs';
-import { Client, IMessage } from '@stomp/stompjs';
+import { map } from 'rxjs/operators';
 import { EnviarMensajeRequest, Match, Mensaje } from '../models';
-import { environment } from '../../../environments/environment';
+import { HISTORIAL_CHAT } from '../graphql/queries';
+import { ENVIAR_MENSAJE } from '../graphql/mutations';
+import {
+  SUSCRIBIR_MENSAJE_RECIBIDO,
+  SUSCRIBIR_MATCH_DETECTADO,
+  SUSCRIBIR_SALA_FINALIZADA
+} from '../graphql/subscriptions';
 
 @Injectable({ providedIn: 'root' })
 export class ChatService {
-  private readonly base = `${environment.apiUrl}/api/chat`;
-  private stompClient: Client | null = null;
-
   // ── Signals reactivos ─────────────────────────────────
   private readonly _mensajes              = signal<Mensaje[]>([]);
   private readonly _matches               = signal<Match[]>([]);
@@ -25,75 +28,108 @@ export class ChatService {
   readonly companeroDesconectado = this._companeroDesconectado.asReadonly();
   readonly nombreCompanero       = this._nombreCompanero.asReadonly();
 
-  constructor(private http: HttpClient) {}
+  // Subscriptions activas
+  private subscriptions: any[] = [];
+  private salaIdActual: number | null = null;
 
-  // ── REST ──────────────────────────────────────────────
+  constructor(private apollo: Apollo) {}
+
+  // ── GraphQL Queries ──────────────────────────────────
 
   getHistorial(salaId: number): Observable<Mensaje[]> {
-    return this.http.get<Mensaje[]>(`${this.base}/${salaId}`);
+    return this.apollo
+      .watchQuery<{ historialChat: Mensaje[] }>({
+        query: HISTORIAL_CHAT,
+        variables: { salaId }
+      })
+      .valueChanges.pipe(map(result => result.data?.historialChat as Mensaje[] ?? []));
   }
 
   cargarHistorial(salaId: number): void {
-    this.getHistorial(salaId).subscribe({
-      next: (msgs) => {
-        const idsHistorial = new Set(msgs.map(m => m.id));
-        const extras = this._mensajes().filter(m => !idsHistorial.has(m.id));
-        this._mensajes.set([...msgs, ...extras]);
-      },
-      error: () => {}
-    });
-  }
-
-  // ── WebSocket ─────────────────────────────────────────
-
-  conectar(salaId: number, token: string, usuarioId?: number): void {
-    if (this.stompClient?.active) return;
-
-    this.stompClient = new Client({
-      brokerURL: environment.wsUrl,
-      connectHeaders: { Authorization: `Bearer ${token}` },
-      reconnectDelay: 3000,
-      onConnect: () => {
-        this._conectado.set(true);
-
-        // Mensajes de chat
-        this.stompClient!.subscribe(
-            `/topic/sala/${salaId}`,
-            (msg: IMessage) => {
-              const mensaje: Mensaje = JSON.parse(msg.body);
-              this._mensajes.update(prev => [...prev, mensaje]);
-            }
-        );
-
-        // Notificaciones de match
-        this.stompClient!.subscribe(
-            `/topic/sala/${salaId}/match`,
-            (msg: IMessage) => {
-              const match: Match = JSON.parse(msg.body);
-              this._matches.update(prev => [...prev, match]);
-            }
-        );
-
-        // Notificación de sala finalizada
-        this.stompClient!.subscribe(
-            `/topic/sala/${salaId}/finalizar`,
-            () => {
-              this._finalizada.set(true);
-            }
-        );
-      },
-      onDisconnect: () => this._conectado.set(false)
-    });
-
-    this.stompClient.activate();
+    this.apollo
+      .watchQuery<{ historialChat: Mensaje[] }>({
+        query: HISTORIAL_CHAT,
+        variables: { salaId }
+      })
+      .valueChanges.subscribe({
+        next: (result) => {
+          const msgs = result.data?.historialChat as Mensaje[] ?? [];
+          const idsHistorial = new Set(msgs.map(m => m.id));
+          const extras = this._mensajes().filter(m => !idsHistorial.has(m.id));
+          this._mensajes.set([...msgs, ...extras]);
+        },
+        error: () => {}
+      });
   }
 
   enviarMensaje(body: EnviarMensajeRequest): void {
-    if (!this.stompClient?.connected) return;
-    this.stompClient.publish({
-      destination: '/app/chat.enviar',
-      body: JSON.stringify(body)
-    });
+    this.apollo
+      .mutate<{ enviarMensaje: Mensaje }>({
+        mutation: ENVIAR_MENSAJE,
+        variables: { input: body }
+      })
+      .subscribe({
+        error: (err) => console.error('Error enviando mensaje:', err)
+      });
+  }
+
+  // ── GraphQL Subscriptions (reemplaza STOMP) ──────────
+
+  /**
+   * Conecta a las suscripciones GraphQL para la sala.
+   * Reemplaza la conexión STOMP anterior.
+   */
+  conectar(salaId: number, token: string, usuarioId?: number): void {
+    if (this._conectado() && this.salaIdActual === salaId) return;
+
+    // Desconectar suscripciones anteriores si las hay
+    this.desconectar();
+
+    this.salaIdActual = salaId;
+    this._conectado.set(true);
+
+    // Suscribirse a mensajes de chat
+    const mensajeSub = this.apollo
+      .subscribe<{ mensajeRecibido: Mensaje }>({
+        query: SUSCRIBIR_MENSAJE_RECIBIDO,
+        variables: { salaId }
+      })
+      .subscribe({
+        next: (result) => {
+          const mensaje = result.data!.mensajeRecibido as Mensaje;
+          this._mensajes.update(prev => [...prev, mensaje]);
+        },
+        error: (err) => console.error('Error en suscripción de mensajes:', err)
+      });
+
+    // Suscribirse a matches detectados
+    const matchSub = this.apollo
+      .subscribe<{ matchDetectado: Match }>({
+        query: SUSCRIBIR_MATCH_DETECTADO,
+        variables: { salaId }
+      })
+      .subscribe({
+        next: (result) => {
+          const match = result.data!.matchDetectado as Match;
+          this._matches.update(prev => [...prev, match]);
+        },
+        error: (err) => console.error('Error en suscripción de matches:', err)
+      });
+
+    // Suscribirse a sala finalizada
+    const salaSub = this.apollo
+      .subscribe<{ salaFinalizada: boolean }>({
+        query: SUSCRIBIR_SALA_FINALIZADA,
+        variables: { salaId }
+      })
+      .subscribe({
+        next: (result) => {
+          this._finalizada.set(result.data!.salaFinalizada);
+        },
+        error: (err) => console.error('Error en suscripción de sala:', err)
+      });
+
+    this.subscriptions = [mensajeSub, matchSub, salaSub];
   }
 
   /**
@@ -104,8 +140,9 @@ export class ChatService {
    * y navega solo a /resultados sin que el usuario haga nada.
    */
   desconectar(): void {
-    this.stompClient?.deactivate();
-    this.stompClient = null;
+    this.subscriptions.forEach(sub => sub.unsubscribe());
+    this.subscriptions = [];
+    this.salaIdActual = null;
     this._mensajes.set([]);
     this._matches.set([]);
     this._finalizada.set(false);            // ← causa raíz del bug "no finaliza"
