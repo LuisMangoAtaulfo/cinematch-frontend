@@ -11,6 +11,7 @@ import { AuthService } from '../../core/services/auth.service';
       <nav class="navbar">
         <span class="navbar__logo">CineMatch</span>
         <div class="navbar__actions">
+          <a routerLink="/dashboard/actividad" class="btn btn--ghost btn--sm">Mi Dashboard</a>
           <a routerLink="/perfil" class="btn btn--ghost btn--sm">Perfil</a>
           <button class="btn btn--secondary btn--sm" (click)="logout()">Cerrar sesión</button>
         </div>

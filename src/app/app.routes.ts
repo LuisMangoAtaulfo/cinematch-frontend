@@ -83,6 +83,22 @@ export const routes: Routes = [
         import('./features/calificacion/calificacion.component').then(m => m.CalificacionComponent)
   },
 
+  // ── Dashboard de usuario ──────────────────────────────
+  {
+    path: 'dashboard/actividad',
+    canActivate: [authGuard],
+    loadComponent: () =>
+        import('./features/dashboard/dashboard-actividad/dashboard-actividad.component')
+            .then(m => m.DashboardActividadComponent)
+  },
+  {
+    path: 'dashboard/tendencias',
+    canActivate: [authGuard],
+    loadComponent: () =>
+        import('./features/dashboard/dashboard-tendencias/dashboard-tendencias.component')
+            .then(m => m.DashboardTendenciasComponent)
+  },
+
   // ── Admin ─────────────────────────────────────────────
   {
     path: 'admin/login',
