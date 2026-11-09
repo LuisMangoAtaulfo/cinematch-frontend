@@ -1,21 +1,30 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { Apollo } from 'apollo-angular';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { PerfilUpdateRequest, Usuario } from '../models';
-import { environment } from '../../../environments/environment';
+import { OBTENER_PERFIL } from '../graphql/queries';
+import { ACTUALIZAR_PERFIL } from '../graphql/mutations';
 
 @Injectable({ providedIn: 'root' })
 export class PerfilService {
-  private readonly base = `${environment.apiUrl}/api/perfil`;
-
-  constructor(private http: HttpClient) {
-  }
+  constructor(private apollo: Apollo) {}
 
   actualizar(id: number, body: PerfilUpdateRequest): Observable<Usuario> {
-    return this.http.put<Usuario>(`${this.base}/${id}`, body);
+    return this.apollo
+      .mutate<{ actualizarPerfil: Usuario }>({
+        mutation: ACTUALIZAR_PERFIL,
+        variables: { id, input: body }
+      })
+      .pipe(map(result => result.data!.actualizarPerfil as Usuario));
   }
 
   obtener(id: number): Observable<Usuario> {
-    return this.http.get<Usuario>(`${this.base}/${id}`);
+    return this.apollo
+      .watchQuery<{ obtenerPerfil: Usuario }>({
+        query: OBTENER_PERFIL,
+        variables: { id }
+      })
+      .valueChanges.pipe(map(result => result.data?.obtenerPerfil as Usuario));
   }
 }

@@ -1,16 +1,20 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { Apollo } from 'apollo-angular';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { Match } from '../models';
-import { environment } from '../../../environments/environment';
+import { BUSCAR_MATCHES } from '../graphql/queries';
 
 @Injectable({ providedIn: 'root' })
 export class MatchesService {
-  private readonly base = `${environment.apiUrl}/api/matches`;
-
-  constructor(private http: HttpClient) {}
+  constructor(private apollo: Apollo) {}
 
   getBySala(salaId: number): Observable<Match[]> {
-    return this.http.get<Match[]>(`${this.base}/${salaId}`);
+    return this.apollo
+      .watchQuery<{ buscarMatches: Match[] }>({
+        query: BUSCAR_MATCHES,
+        variables: { salaId }
+      })
+      .valueChanges.pipe(map(result => result.data?.buscarMatches as Match[] ?? []));
   }
 }

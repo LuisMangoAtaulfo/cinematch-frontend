@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { Apollo } from 'apollo-angular';
 import {map, Observable} from 'rxjs';
 import {
   CalificacionResponse,
@@ -7,7 +7,18 @@ import {
   Plataforma,
   PlataformaEstadoRequest
 } from '../models';
-import { environment } from '../../../environments/environment';
+import {
+  OBTENER_METRICAS,
+  HISTORIAL_METRICAS,
+  LISTAR_PLATAFORMAS,
+  PLATAFORMA_EN_USO
+} from '../graphql/queries';
+import { CAMBIAR_ESTADO_PLATAFORMA } from '../graphql/mutations';
+import {
+  OBTENER_RETROALIMENTACION,
+  PROMEDIO_CALIFICACION
+} from '../graphql/queries';
+
 export interface MetricasDia {
   fecha:                string;
   totalSalas:           number;
@@ -15,37 +26,52 @@ export interface MetricasDia {
   totalMatches:         number;
   promedioCalificacion: number | null;
 }
-// Agrega esta interfaz junto a las demas
 
 // ── Métricas ──────────────────────────────────────────
 @Injectable({ providedIn: 'root' })
-// El archivo queda así:
 export class MetricasService {
-  private readonly base = `${environment.apiUrl}/api/metricas`;
-  constructor(private http: HttpClient) {}
+  constructor(private apollo: Apollo) {}
 
   get(): Observable<Metricas> {
-    return this.http.get<Metricas>(this.base);
+    return this.apollo.watchQuery<{ metricas: Metricas }>({
+      query: OBTENER_METRICAS,
+      fetchPolicy: 'network-only'
+    }).valueChanges.pipe(
+      map(result => result.data?.metricas as Metricas)
+    );
   }
 
-  // AGREGA ESTO:
   getHistorial(): Observable<MetricasDia[]> {
-    return this.http.get<MetricasDia[]>(`${this.base}/historial`);
+    return this.apollo.watchQuery<{ historialMetricas: MetricasDia[] }>({
+      query: HISTORIAL_METRICAS,
+      fetchPolicy: 'network-only'
+    }).valueChanges.pipe(
+      map(result => result.data?.historialMetricas as MetricasDia[])
+    );
   }
 }
 
 // ── Plataformas ───────────────────────────────────────
 @Injectable({ providedIn: 'root' })
 export class PlataformasService {
-  private readonly base = `${environment.apiUrl}/api/plataformas`;
-  constructor(private http: HttpClient) {}
+  constructor(private apollo: Apollo) {}
 
   getAll(): Observable<Plataforma[]> {
-    return this.http.get<Plataforma[]>(this.base);
+    return this.apollo.watchQuery<{ plataformas: Plataforma[] }>({
+      query: LISTAR_PLATAFORMAS,
+      fetchPolicy: 'network-only'
+    }).valueChanges.pipe(
+      map(result => result.data?.plataformas as Plataforma[])
+    );
   }
 
   actualizarEstado(body: PlataformaEstadoRequest): Observable<void> {
-    return this.http.put<void>(`${this.base}/estado`, body);
+    return this.apollo.mutate<{ cambiarEstadoPlataforma: boolean }>({
+      mutation: CAMBIAR_ESTADO_PLATAFORMA,
+      variables: { input: { id: body.id, habilitada: body.habilitada } }
+    }).pipe(
+      map(() => undefined)
+    );
   }
 
   getHabilitadas(): Observable<Plataforma[]> {
@@ -55,26 +81,46 @@ export class PlataformasService {
   }
 
   setEstado(id: number, habilitada: boolean): Observable<void> {
-    return this.http.put<void>(`${this.base}/estado`, { id, habilitada });
+    return this.apollo.mutate<{ cambiarEstadoPlataforma: boolean }>({
+      mutation: CAMBIAR_ESTADO_PLATAFORMA,
+      variables: { input: { id, habilitada } }
+    }).pipe(
+      map(() => undefined)
+    );
   }
 
   // En PlataformasService
   estaEnUso(id: number): Observable<boolean> {
-    return this.http.get<boolean>(`${this.base}/${id}/en-uso`);
+    return this.apollo.watchQuery<{ plataformaEnUso: boolean }>({
+      query: PLATAFORMA_EN_USO,
+      variables: { id },
+      fetchPolicy: 'network-only'
+    }).valueChanges.pipe(
+      map(result => result.data?.plataformaEnUso ?? false)
+    );
   }
 }
 
 // ── Retroalimentación ─────────────────────────────────
 @Injectable({ providedIn: 'root' })
 export class RetroalimentacionService {
-  private readonly base = `${environment.apiUrl}/api/retroalimentacion`;
-  constructor(private http: HttpClient) {}
+  constructor(private apollo: Apollo) {}
 
   getAll(): Observable<CalificacionResponse[]> {
-    return this.http.get<CalificacionResponse[]>(this.base);
+    return this.apollo.watchQuery<{ retroalimentacion: CalificacionResponse[] }>({
+      query: OBTENER_RETROALIMENTACION,
+      fetchPolicy: 'network-only'
+    }).valueChanges.pipe(
+      map(result => result.data?.retroalimentacion as CalificacionResponse[])
+    );
   }
 
   getPromedio(): Observable<number> {
-    return this.http.get<number>(`${this.base}/promedio`);
+    return this.apollo.watchQuery<{ promedioCalificacion: number }>({
+      query: PROMEDIO_CALIFICACION,
+      fetchPolicy: 'network-only'
+    }).valueChanges.pipe(
+      map(result => result.data?.promedioCalificacion ?? 0)
+    );
   }
 }

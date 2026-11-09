@@ -137,6 +137,9 @@ export class TMDbFacadeService {
   ) {}
 
   getPosterUrl(path: string | null): string {
-    return path ? `${this.imageBase}${path}` : 'assets/placeholder.png';
+    if (!path) return 'assets/placeholder.png';
+    // `imagen` se guarda ya como URL absoluta de TMDb; solo se prepende
+    // la base si viene una ruta relativa legada (/abc.jpg).
+    return path.startsWith('http') ? path : `${this.imageBase}${path}`;
   }
 }

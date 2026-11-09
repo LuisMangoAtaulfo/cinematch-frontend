@@ -1,9 +1,19 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { Apollo } from 'apollo-angular';
 import { Observable, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { Contenido, CrearSalaRequest, Match, Sala, UnirseRequest } from '../models';
-import { environment } from '../../../environments/environment';
+import {
+  OBTENER_SALA,
+  CONTENIDO_POR_SALA,
+  BUSCAR_MATCHES
+} from '../graphql/queries';
+import {
+  CREAR_SALA,
+  UNIRSE_A_SALA,
+  FINALIZAR_SALA,
+  APLICAR_FILTROS
+} from '../graphql/mutations';
 
 /**
  * Resultado tipado de getFiltros para distinguir los tres estados:
@@ -15,21 +25,33 @@ export type FiltrosResult = 'sin-filtros' | 'sin-resultados' | Contenido[];
 
 @Injectable({ providedIn: 'root' })
 export class SalaService {
-  private readonly base        = `${environment.apiUrl}/api/salas`;
-  private readonly baseFiltros = `${environment.apiUrl}/api/filtros`;
-
-  constructor(private http: HttpClient) {}
+  constructor(private apollo: Apollo) {}
 
   crear(body: CrearSalaRequest): Observable<Sala> {
-    return this.http.post<Sala>(`${this.base}/crear`, body);
+    return this.apollo
+      .mutate<{ crearSala: Sala }>({
+        mutation: CREAR_SALA,
+        variables: { input: body }
+      })
+      .pipe(map(result => result.data!.crearSala as Sala));
   }
 
   unirse(body: UnirseRequest): Observable<Sala> {
-    return this.http.post<Sala>(`${this.base}/unirse`, body);
+    return this.apollo
+      .mutate<{ unirseASala: Sala }>({
+        mutation: UNIRSE_A_SALA,
+        variables: { input: body }
+      })
+      .pipe(map(result => result.data!.unirseASala as Sala));
   }
 
   getById(id: number): Observable<Sala> {
-    return this.http.get<Sala>(`${this.base}/${id}`);
+    return this.apollo
+      .watchQuery<{ obtenerSala: Sala }>({
+        query: OBTENER_SALA,
+        variables: { id }
+      })
+      .valueChanges.pipe(map(result => result.data?.obtenerSala as Sala));
   }
 
   /**
@@ -41,21 +63,46 @@ export class SalaService {
    *   200 + [..] → Contenido[]     (catálogo listo)
    */
   getFiltros(salaId: number): Observable<FiltrosResult> {
-    return this.http.get<Contenido[] | null>(`${this.baseFiltros}/${salaId}`).pipe(
-        map((data): FiltrosResult => {
-          if (data === null || data === undefined) return 'sin-filtros'; // 204
-          if (data.length === 0)                   return 'sin-resultados';
-          return data;
+    return this.apollo
+      .watchQuery<{ contenidoPorSala: Contenido[] | null }>({
+        query: CONTENIDO_POR_SALA,
+        variables: { salaId }
+      })
+      .valueChanges.pipe(
+        map((result): FiltrosResult => {
+          const data = result.data?.contenidoPorSala;
+          if (data === null || data === undefined) return 'sin-filtros';
+          if (data.length === 0) return 'sin-resultados';
+          return data as Contenido[];
         }),
-        catchError(() => of('sin-filtros' as FiltrosResult)) // error de red → tratar como sin filtros
-    );
+        catchError(() => of('sin-filtros' as FiltrosResult))
+      );
+  }
+
+  aplicarFiltros(body: any): Observable<Contenido[]> {
+    return this.apollo
+      .mutate<{ aplicarFiltros: Contenido[] }>({
+        mutation: APLICAR_FILTROS,
+        variables: { input: body }
+      })
+      .pipe(map(result => result.data!.aplicarFiltros as Contenido[]));
   }
 
   finalizar(id: number): Observable<void> {
-    return this.http.put<void>(`${this.base}/${id}/finalizar`, {});
+    return this.apollo
+      .mutate<{ finalizarSala: boolean }>({
+        mutation: FINALIZAR_SALA,
+        variables: { id }
+      })
+      .pipe(map(() => undefined));
   }
 
   getMatches(id: number): Observable<Match[]> {
-    return this.http.get<Match[]>(`${this.base}/${id}/matches`);
+    return this.apollo
+      .watchQuery<{ buscarMatches: Match[] }>({
+        query: BUSCAR_MATCHES,
+        variables: { salaId: id }
+      })
+      .valueChanges.pipe(map(result => result.data?.buscarMatches as Match[] ?? []));
   }
 }
