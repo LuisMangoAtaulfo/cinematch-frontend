@@ -20,7 +20,7 @@ export const UNIRSE_A_SALA = gql`
 `;
 
 export const FINALIZAR_SALA = gql`
-  mutation FinalizarSala($id: ID!) {
-    finalizarSala(id: $id)
+  mutation FinalizarSala($id: ID!, $usuarioId: ID!) {
+    finalizarSala(id: $id, usuarioId: $usuarioId)
   }
 `;

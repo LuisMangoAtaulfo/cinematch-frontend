@@ -16,6 +16,7 @@ import {map} from "rxjs/operators";
       <nav class="navbar">
         <span class="navbar__logo">CineMatch</span>
         <div class="navbar__actions">
+          <a routerLink="/admin/dashboard"          class="btn btn--ghost btn--sm">Dashboard</a>
           <a routerLink="/admin/metricas"          class="btn btn--ghost btn--sm">Métricas</a>
           <a routerLink="/admin/retroalimentacion" class="btn btn--ghost btn--sm">Retroalimentación</a>
           <button class="btn btn--secondary btn--sm" (click)="logout()">Salir</button>
@@ -33,7 +34,8 @@ import {map} from "rxjs/operators";
             <div class="card">
               <div style="display:flex; flex-direction:column; gap:0;">
                 @for (p of plataformas(); track p.id; let last = $last) {
-                  <div style="display:flex; align-items:center; justify-content:space-between;
+                  <div class="plataforma-item"
+                       style="display:flex; align-items:center; justify-content:space-between;
                                padding:14px 0;"
                        [style.border-bottom]="!last ? '1px solid var(--border)' : ''">
                     <div>

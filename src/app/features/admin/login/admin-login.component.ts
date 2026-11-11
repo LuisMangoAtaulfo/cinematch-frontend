@@ -92,7 +92,7 @@ export class AdminLoginComponent {
     this.auth.loginAdmin({ correo: this.correo, password: this.password }).subscribe({
       next: () => {
         if (this.auth.isAdmin()) {
-          this.router.navigate(['/admin/metricas']);
+          this.router.navigate(['/admin/dashboard']);
         } else {
           this.error.set('Esta cuenta no tiene permisos de administrador');
           this.auth.logoutAdmin();
@@ -100,7 +100,19 @@ export class AdminLoginComponent {
         }
       },
       error: (e) => {
-        this.error.set(e.status === 401 ? 'Credenciales incorrectas' : 'Error al iniciar sesión');
+        let mensaje = 'Error al iniciar sesión';
+        if (e.graphQLErrors && e.graphQLErrors.length > 0) {
+          const errorMsg = e.graphQLErrors[0].message;
+          // Si el usuario no existe en la tabla de administradores, mostrar mensaje de permisos
+          if (errorMsg.includes('Usuario no encontrado')) {
+            mensaje = 'Esta cuenta no tiene permisos de administrador';
+          } else {
+            mensaje = errorMsg;
+          }
+        } else if (e.status === 401) {
+          mensaje = 'Credenciales incorrectas';
+        }
+        this.error.set(mensaje);
         this.cargando.set(false);
       }
     });

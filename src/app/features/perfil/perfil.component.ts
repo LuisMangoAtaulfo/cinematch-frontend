@@ -1,6 +1,6 @@
 import { Component, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { RouterLink, Router } from '@angular/router';
 import { PerfilService } from '../../core/services/perfil.service';
 import { AuthService } from '../../core/services/auth.service';
 import { Usuario } from '../../core/models';
@@ -45,7 +45,7 @@ import { Usuario } from '../../core/models';
                       (click)="guardar()">
                 {{ cargando() ? 'Guardando...' : 'Guardar cambios' }}
               </button>
-              <a routerLink="/home" class="btn btn--ghost btn--full">Cancelar</a>
+              <button class="btn btn--ghost btn--full" (click)="cancelar()">Cancelar</button>
             </div>
           </div>
         </div>
@@ -62,7 +62,11 @@ export class PerfilComponent implements OnInit {
 
   private usuarioId = 0;
 
-  constructor(private perfilSvc: PerfilService, private auth: AuthService) {}
+  constructor(
+      private perfilSvc: PerfilService,
+      private auth: AuthService,
+      private router: Router
+  ) {}
 
   ngOnInit(): void {
     const u = this.auth.usuario() as (Usuario | null);
@@ -70,10 +74,14 @@ export class PerfilComponent implements OnInit {
 
     this.usuarioId = u.id;
 
+    // Set initial values from auth service so fields are never empty
+    this.nombre      = u.nombre ?? '';
+    this.descripcion = u.descripcion ?? '';
+
     this.perfilSvc.obtener(this.usuarioId).subscribe({
       next: (datos) => {
-        this.nombre      = datos.nombre ?? '';
-        this.descripcion = datos.descripcion ?? '';
+        this.nombre      = datos.nombre ?? this.nombre;
+        this.descripcion = datos.descripcion ?? this.descripcion;
       },
       error: () => this.mensaje.set('Error al cargar el perfil')
     });
@@ -103,5 +111,9 @@ export class PerfilComponent implements OnInit {
         this.cargando.set(false);
       }
     });
+  }
+
+  cancelar(): void {
+    this.router.navigate(['/home']);
   }
 }

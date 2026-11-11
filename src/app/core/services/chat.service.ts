@@ -1,4 +1,4 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, signal, OnDestroy } from '@angular/core';
 import { Apollo } from 'apollo-angular';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -12,7 +12,7 @@ import {
 } from '../graphql/subscriptions';
 
 @Injectable({ providedIn: 'root' })
-export class ChatService {
+export class ChatService implements OnDestroy {
   // ── Signals reactivos ─────────────────────────────────
   private readonly _mensajes              = signal<Mensaje[]>([]);
   private readonly _matches               = signal<Match[]>([]);
@@ -32,7 +32,37 @@ export class ChatService {
   private subscriptions: any[] = [];
   private salaIdActual: number | null = null;
 
-  constructor(private apollo: Apollo) {}
+  // Event listeners para detección de conexión/desconexión WS
+  private onConnectedBound: () => void;
+  private onClosedBound: () => void;
+  private onErrorBound: () => void;
+
+  constructor(private apollo: Apollo) {
+    // Escuchar eventos de conexión WebSocket desde Apollo
+    this.onConnectedBound = () => {
+      if (this.salaIdActual) {
+        this._conectado.set(true);
+        this._companeroDesconectado.set(false);
+      }
+    };
+    this.onClosedBound = () => {
+      this._conectado.set(false);
+    };
+    this.onErrorBound = () => {
+      this._conectado.set(false);
+    };
+
+    window.addEventListener('graphql-ws-connected', this.onConnectedBound);
+    window.addEventListener('graphql-ws-closed', this.onClosedBound);
+    window.addEventListener('graphql-ws-error', this.onErrorBound);
+  }
+
+  ngOnDestroy(): void {
+    window.removeEventListener('graphql-ws-connected', this.onConnectedBound);
+    window.removeEventListener('graphql-ws-closed', this.onClosedBound);
+    window.removeEventListener('graphql-ws-error', this.onErrorBound);
+    this.desconectar();
+  }
 
   // ── GraphQL Queries ──────────────────────────────────
 
@@ -96,8 +126,10 @@ export class ChatService {
       })
       .subscribe({
         next: (result) => {
-          const mensaje = result.data!.mensajeRecibido as Mensaje;
-          this._mensajes.update(prev => [...prev, mensaje]);
+          const mensaje = result.data?.mensajeRecibido as Mensaje;
+          if (mensaje) {
+            this._mensajes.update(prev => [...prev, mensaje]);
+          }
         },
         error: (err) => console.error('Error en suscripción de mensajes:', err)
       });
@@ -110,8 +142,10 @@ export class ChatService {
       })
       .subscribe({
         next: (result) => {
-          const match = result.data!.matchDetectado as Match;
-          this._matches.update(prev => [...prev, match]);
+          const match = result.data?.matchDetectado as Match;
+          if (match) {
+            this._matches.update(prev => [...prev, match]);
+          }
         },
         error: (err) => console.error('Error en suscripción de matches:', err)
       });
@@ -124,7 +158,10 @@ export class ChatService {
       })
       .subscribe({
         next: (result) => {
-          this._finalizada.set(result.data!.salaFinalizada);
+          const finalizada = result.data?.salaFinalizada;
+          if (finalizada !== undefined) {
+            this._finalizada.set(finalizada);
+          }
         },
         error: (err) => console.error('Error en suscripción de sala:', err)
       });

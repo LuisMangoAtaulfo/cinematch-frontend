@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Apollo } from 'apollo-angular';
 import { Observable, map } from 'rxjs';
-import { OBTENER_METRICAS_USUARIO, HISTORIAL_METRICAS_USUARIO } from '../graphql/queries/metricas.queries';
+import { OBTENER_METRICAS, HISTORIAL_METRICAS } from '../graphql/queries/metricas.queries';
 import { MetricasDia } from './admin.service';
 
 export interface MetricasUsuario {
@@ -19,7 +19,7 @@ export class MetricasUsuarioService {
   getMetricas(usuarioId: number): Observable<MetricasUsuario> {
     return this.apollo
       .watchQuery<{ metricasUsuario: MetricasUsuario }>({
-        query: OBTENER_METRICAS_USUARIO,
+        query: OBTENER_METRICAS,
         variables: { id: usuarioId },
         fetchPolicy: 'network-only',
       })
@@ -29,7 +29,7 @@ export class MetricasUsuarioService {
   getHistorial(usuarioId: number): Observable<MetricasDia[]> {
     return this.apollo
       .watchQuery<{ historialMetricasUsuario: MetricasDia[] }>({
-        query: HISTORIAL_METRICAS_USUARIO,
+        query: HISTORIAL_METRICAS,
         variables: { id: usuarioId },
         fetchPolicy: 'network-only',
       })

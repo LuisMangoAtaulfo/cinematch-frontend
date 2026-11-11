@@ -2,6 +2,7 @@ import { Component, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink, Router } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
+import { ChatService } from '../../../core/services/chat.service';
 
 @Component({
   selector: 'app-login',
@@ -81,7 +82,7 @@ export class LoginComponent {
   cargando = signal(false);
   error    = signal('');
 
-  constructor(private auth: AuthService, private router: Router) {}
+  constructor(private auth: AuthService, private router: Router, private chatSvc: ChatService) {}
 
   verPassword = signal(false);
   onLogin(): void {
@@ -92,13 +93,20 @@ export class LoginComponent {
     }
     this.cargando.set(true);
     this.auth.login({ correo: this.correo, password: this.password }).subscribe({
-      next: () => this.router.navigate(['/home']),
+      next: () => {
+        this.chatSvc.desconectar(); // Desconectar ChatService al hacer login
+        this.router.navigate(['/home']);
+      },
       error: (e) => {
-        this.error.set(
-          e.status === 401 ? 'Credenciales incorrectas' :
-          e.status === 404 ? 'Usuario no encontrado' :
-          'Error al iniciar sesión'
-        );
+        let mensaje = 'Error al iniciar sesión';
+        if (e.graphQLErrors && e.graphQLErrors.length > 0) {
+          mensaje = e.graphQLErrors[0].message;
+        } else if (e.status === 401) {
+          mensaje = 'Credenciales incorrectas';
+        } else if (e.status === 404) {
+          mensaje = 'Usuario no encontrado';
+        }
+        this.error.set(mensaje);
         this.cargando.set(false);
       }
     });

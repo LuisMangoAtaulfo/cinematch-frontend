@@ -2,6 +2,7 @@ import { Component, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink, Router } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
+import { ChatService } from '../../../core/services/chat.service';
 
 @Component({
   selector: 'app-registro',
@@ -57,7 +58,7 @@ export class RegistroComponent {
   cargando = signal(false);
   error    = signal('');
 
-  constructor(private auth: AuthService, private router: Router) {}
+  constructor(private auth: AuthService, private router: Router, private chatSvc: ChatService) {}
 
   onRegistro(): void {
     this.error.set('');
@@ -76,11 +77,18 @@ export class RegistroComponent {
     this.cargando.set(true);
     this.auth.registrar({ nombre: this.nombre, correo: this.correo, password: this.password })
       .subscribe({
-        next: () => this.router.navigate(['/home']),
+        next: () => {
+          this.chatSvc.desconectar(); // Desconectar ChatService al registrarse
+          this.router.navigate(['/home']);
+        },
         error: (e) => {
-          this.error.set(
-            e.status === 409 ? 'El correo ya está en uso' : 'Error al crear cuenta'
-          );
+          let mensaje = 'Error al crear cuenta';
+          if (e.graphQLErrors && e.graphQLErrors.length > 0) {
+            mensaje = e.graphQLErrors[0].message;
+          } else if (e.status === 409) {
+            mensaje = 'El correo ya está en uso';
+          }
+          this.error.set(mensaje);
           this.cargando.set(false);
         }
       });

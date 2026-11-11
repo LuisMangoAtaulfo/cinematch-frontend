@@ -390,14 +390,14 @@ const POLL_INTERVAL_MS = 4000;
               <div class="swipe-card" #card>
                 <div class="swipe-card__img"
                      [style.background-image]="c.imagen ? 'url(' + c.imagen + ')' : 'none'">
-                  <p class="swipe-card__title">{{ c.titulo }}</p>
+                  <p class="swipe-card__title titulo">{{ c.titulo }}</p>
                 </div>
                 <div class="swipe-card__body">
                   <div class="swipe-card__meta">
-                    @if (c.anio)   { <span class="tag">{{ c.anio }}</span> }
-                    @if (c.genero) { <span class="tag">{{ c.genero }}</span> }
+                    @if (c.anio)   { <span class="tag anio">{{ c.anio }}</span> }
+                    @if (c.genero) { <span class="tag genero">{{ c.genero }}</span> }
                     @for (p of c.plataformas; track p) {
-                      <span class="tag">{{ p }}</span>
+                      <span class="tag plataforma">{{ p }}</span>
                     }
                   </div>
                   @if (!c.plataformas || c.plataformas.length === 0) {
@@ -408,14 +408,16 @@ const POLL_INTERVAL_MS = 4000;
             </div>
 
             <div class="swipe-actions">
-              <button class="swipe-btn swipe-btn--reject"
+              <button class="swipe-btn swipe-btn--reject btn-dislike"
                       [class.active]="dragDir() === -1"
                       title="Rechazar"
+                      aria-label="dislike"
                       [disabled]="evaluando() || chatSvc.companeroDesconectado() || !chatSvc.conectado()"
                       (click)="evaluar(false)">&#10007;</button>
-              <button class="swipe-btn swipe-btn--approve"
+              <button class="swipe-btn swipe-btn--approve btn-like"
                       [class.active]="dragDir() === 1"
                       title="Aprobar"
+                      aria-label="like"
                       [disabled]="evaluando() || chatSvc.companeroDesconectado() || !chatSvc.conectado()"
                       (click)="evaluar(true)">&#10003;</button>
             </div>
@@ -829,8 +831,9 @@ export class SwipeComponent implements OnInit, OnDestroy {
   finalizar(): void {
     this.stopPoll$.next();
     const salaId = this.state.salaId();
+    const usuarioId = this.usuarioId;
     if (!salaId) { this.router.navigate(['/home']); return; }
-    this.salaSvc.finalizar(salaId).subscribe({
+    this.salaSvc.finalizar(salaId, usuarioId).subscribe({
       next:  () => this.router.navigate(['/resultados']),
       error: () => this.router.navigate(['/resultados'])
     });

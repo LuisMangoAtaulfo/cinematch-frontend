@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Apollo } from 'apollo-angular';
-import { Observable, of } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { Contenido, CrearSalaRequest, Match, Sala, UnirseRequest } from '../models';
 import {
@@ -42,7 +42,16 @@ export class SalaService {
         mutation: UNIRSE_A_SALA,
         variables: { input: body }
       })
-      .pipe(map(result => result.data!.unirseASala as Sala));
+      .pipe(
+        map(result => result.data!.unirseASala as Sala),
+        catchError(error => {
+          if (error.graphQLErrors && error.graphQLErrors.length > 0) {
+            const errorMsg = error.graphQLErrors[0].message;
+            return throwError(() => ({ status: 400, message: errorMsg }));
+          }
+          return throwError(() => error);
+        })
+      );
   }
 
   getById(id: number): Observable<Sala> {
@@ -88,11 +97,11 @@ export class SalaService {
       .pipe(map(result => result.data!.aplicarFiltros as Contenido[]));
   }
 
-  finalizar(id: number): Observable<void> {
+  finalizar(id: number, usuarioId: number): Observable<void> {
     return this.apollo
       .mutate<{ finalizarSala: boolean }>({
         mutation: FINALIZAR_SALA,
-        variables: { id }
+        variables: { id, usuarioId }
       })
       .pipe(map(() => undefined));
   }

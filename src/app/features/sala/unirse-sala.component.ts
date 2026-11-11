@@ -40,7 +40,7 @@ import { Usuario } from '../../core/models';
             </div>
 
             @if (error()) {
-              <p style="color:var(--danger); font-size:13px;">{{ error() }}</p>
+              <p class="form-error" style="color:var(--danger); font-size:13px;">{{ error() }}</p>
             }
 
             <button class="btn btn--primary btn--full"
@@ -89,11 +89,16 @@ export class UnirseSalaComponent implements OnInit {
                 this.router.navigate(['/espera-filtros']);
             },
             error: (e) => {
-                this.error.set(
-                    e.status === 400 ? 'Código de sala inválido' :
-                        e.status === 409 ? 'La sala ya no está disponible' :
-                            'Error al unirse a la sala'
-                );
+                // Usar el mensaje del error si está disponible
+                if (e.message) {
+                    this.error.set(e.message);
+                } else {
+                    this.error.set(
+                        e.status === 400 ? 'Código de sala inválido' :
+                            e.status === 409 ? 'La sala ya no está disponible' :
+                                'Error al unirse a la sala'
+                    );
+                }
                 this.uniendose.set(false);
             }
         });

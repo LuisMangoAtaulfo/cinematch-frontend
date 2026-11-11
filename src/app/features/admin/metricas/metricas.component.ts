@@ -14,6 +14,7 @@ import { Metricas } from '../../../core/models';
       <nav class="navbar">
         <span class="navbar__logo">CineMatch</span>
         <div class="navbar__actions">
+          <a routerLink="/admin/dashboard"       class="btn btn--ghost btn--sm">Dashboard</a>
           <a routerLink="/admin/plataformas"       class="btn btn--ghost btn--sm">Plataformas</a>
           <a routerLink="/admin/retroalimentacion" class="btn btn--ghost btn--sm">Retroalimentacion</a>
           <button class="btn btn--secondary btn--sm" (click)="logout()">Salir</button>
