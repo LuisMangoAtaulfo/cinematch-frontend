@@ -43,7 +43,7 @@ import { Usuario } from '../../core/models';
 
               <div style="background:var(--surface2); border:1px solid var(--border);
                           border-radius:var(--radius); padding:24px; text-align:center;">
-                <p style="font-family:var(--font-disp); font-size:42px;
+                <p class="sala-code" style="font-family:var(--font-disp); font-size:42px;
                            letter-spacing:10px; color:var(--accent);">
                   {{ codigoSala() }}
                 </p>
@@ -138,7 +138,7 @@ export class CrearSalaComponent implements OnInit, OnDestroy {
 
     cancelar(): void {
         this.destroy$.next(); // detiene el polling primero
-        this.salaSvc.finalizar(this.salaId).subscribe({
+        this.salaSvc.finalizar(this.salaId, this.usuarioId).subscribe({
             complete: () => this.router.navigate(['/home']),
             error:    () => this.router.navigate(['/home']) // navega igual aunque falle
         });

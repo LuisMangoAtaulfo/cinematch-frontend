@@ -21,10 +21,11 @@ export class PerfilService {
 
   obtener(id: number): Observable<Usuario> {
     return this.apollo
-      .watchQuery<{ obtenerPerfil: Usuario }>({
+      .query<{ obtenerPerfil: Usuario }>({
         query: OBTENER_PERFIL,
-        variables: { id }
+        variables: { id },
+        fetchPolicy: 'network-only'
       })
-      .valueChanges.pipe(map(result => result.data?.obtenerPerfil as Usuario));
+      .pipe(map(result => result.data?.obtenerPerfil as Usuario));
   }
 }

@@ -16,6 +16,8 @@ const TOKEN_KEY = 'cm_token';
  * - Type policies para mejor normalización del caché
  * - Split para enrutar queries/mutations por HTTP y subscriptions por WebSocket
  * - Fetch policies optimizadas para diferentes tipos de operaciones
+ * - Heartbeat/keepAlive para detección de desconexión
+ * - Reconexión automática con backoff exponencial
  *
  * Nota: el token se lee directamente de localStorage (y no vía AuthService)
  * para evitar una dependencia circular entre Apollo ↔ AuthService.
@@ -35,8 +37,26 @@ export function createApollo(httpLink: HttpLink): any {
         return { authToken: token };
       },
       // Reconexión automática con backoff exponencial
-      retryAttempts: 5,
+      retryAttempts: environment.wsReconnectAttempts ?? 5,
       shouldRetry: () => true,
+
+      // Heartbeat: graphql-ws envía pings periódicos para mantener la conexión viva
+      // y detectar desconexiones rápidamente (< 15 segundos)
+      keepAlive: environment.heartbeatInterval ?? 5000,
+
+      // Manejo de eventos de conexión para actualizar estado
+      on: {
+        connected: () => {
+          // Dispatch custom event para que ChatService actualice _conectado
+          window.dispatchEvent(new CustomEvent('graphql-ws-connected'));
+        },
+        closed: () => {
+          window.dispatchEvent(new CustomEvent('graphql-ws-closed'));
+        },
+        error: () => {
+          window.dispatchEvent(new CustomEvent('graphql-ws-error'));
+        },
+      },
     }),
   );
 

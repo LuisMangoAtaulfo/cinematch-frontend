@@ -1,8 +1,8 @@
 import { Injectable, signal, computed } from '@angular/core';
 import { Router } from '@angular/router';
 import { Apollo } from 'apollo-angular';
-import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { Observable, throwError } from 'rxjs';
+import { map, catchError } from 'rxjs/operators';
 import {
   AuthResponse,
   LoginRequest,
@@ -44,9 +44,23 @@ export class AuthService {
       })
       .pipe(
         map(result => {
-          const res = result.data!.registrar;
+          if (result.error) {
+            throw result.error;
+          }
+          const res = result.data?.registrar;
+          if (!res) {
+            throw new Error('Error al crear cuenta');
+          }
           this.persist(res);
           return res;
+        }),
+        catchError(error => {
+          if (error.graphQLErrors && error.graphQLErrors.length > 0) {
+            return throwError(() => error);
+          }
+          return throwError(() => ({
+            graphQLErrors: [{ message: error.message }]
+          }));
         })
       );
   }
@@ -60,9 +74,26 @@ export class AuthService {
       })
       .pipe(
         map(result => {
-          const res = result.data!.login;
+          // Si hay errores de GraphQL en el resultado, lanzarlos
+          if (result.error) {
+            throw result.error;
+          }
+          const res = result.data?.login;
+          if (!res) {
+            throw new Error('Error al iniciar sesión');
+          }
           this.persist(res);
           return res;
+        }),
+        catchError(error => {
+          // Si es un error de Apollo con graphQLErrors, propagarlo tal cual
+          if (error.graphQLErrors && error.graphQLErrors.length > 0) {
+            return throwError(() => error);
+          }
+          // Si es un Error simple, envolverlo en un objeto con graphQLErrors
+          return throwError(() => ({
+            graphQLErrors: [{ message: error.message }]
+          }));
         })
       );
   }
@@ -76,9 +107,23 @@ export class AuthService {
       })
       .pipe(
         map(result => {
-          const res = result.data!.loginAdmin;
+          if (result.error) {
+            throw result.error;
+          }
+          const res = result.data?.loginAdmin;
+          if (!res) {
+            throw new Error('Error al iniciar sesión');
+          }
           this.persist(res);
           return res;
+        }),
+        catchError(error => {
+          if (error.graphQLErrors && error.graphQLErrors.length > 0) {
+            return throwError(() => error);
+          }
+          return throwError(() => ({
+            graphQLErrors: [{ message: error.message }]
+          }));
         })
       );
   }

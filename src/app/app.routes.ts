@@ -83,17 +83,17 @@ export const routes: Routes = [
         import('./features/calificacion/calificacion.component').then(m => m.CalificacionComponent)
   },
 
-  // ── Dashboard de usuario ──────────────────────────────
+  // ── Dashboard admin ────────────────────────────────
   {
-    path: 'dashboard/actividad',
-    canActivate: [authGuard],
+    path: 'admin/dashboard',
+    canActivate: [authGuard, adminGuard],
     loadComponent: () =>
         import('./features/dashboard/dashboard-actividad/dashboard-actividad.component')
             .then(m => m.DashboardActividadComponent)
   },
   {
-    path: 'dashboard/tendencias',
-    canActivate: [authGuard],
+    path: 'admin/dashboard/tendencias',
+    canActivate: [authGuard, adminGuard],
     loadComponent: () =>
         import('./features/dashboard/dashboard-tendencias/dashboard-tendencias.component')
             .then(m => m.DashboardTendenciasComponent)
@@ -107,19 +107,19 @@ export const routes: Routes = [
   },
   {
     path: 'admin/metricas',
-    canActivate: [adminGuard],
+    canActivate: [authGuard, adminGuard],
     loadComponent: () =>
         import('./features/admin/metricas/metricas.component').then(m => m.MetricasComponent)
   },
   {
     path: 'admin/plataformas',
-    canActivate: [adminGuard],
+    canActivate: [authGuard, adminGuard],
     loadComponent: () =>
         import('./features/admin/plataformas/plataformas.component').then(m => m.PlataformasComponent)
   },
   {
     path: 'admin/retroalimentacion',
-    canActivate: [adminGuard],
+    canActivate: [authGuard, adminGuard],
     loadComponent: () =>
         import('./features/admin/retroalimentacion/retroalimentacion.component')
             .then(m => m.RetroalimentacionComponent)

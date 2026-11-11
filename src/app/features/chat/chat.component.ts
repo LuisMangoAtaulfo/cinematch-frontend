@@ -86,7 +86,7 @@ import { Usuario } from '../../core/models';
       </div>
 
       <div class="chat-input-bar">
-        <input type="text" placeholder="Escribe un mensaje..." style="flex:1;"
+        <input id="texto" type="text" placeholder="Escribe un mensaje..." style="flex:1;"
                [(ngModel)]="texto"
                (keydown.enter)="enviar()">
         <button class="btn btn--primary" style="padding:11px 18px;"

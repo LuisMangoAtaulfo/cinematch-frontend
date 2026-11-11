@@ -22,6 +22,7 @@ import { DecimalPipe } from '@angular/common';
       <nav class="navbar">
         <span class="navbar__logo">CineMatch</span>
         <div class="navbar__actions">
+          <a routerLink="/admin/dashboard"          class="btn btn--ghost btn--sm">Dashboard</a>
           <a routerLink="/admin/metricas"    class="btn btn--ghost btn--sm">Métricas</a>
           <a routerLink="/admin/plataformas" class="btn btn--ghost btn--sm">Plataformas</a>
           <button class="btn btn--secondary btn--sm" (click)="logout()">Salir</button>
@@ -40,8 +41,9 @@ import { DecimalPipe } from '@angular/common';
             <!-- Filtro de fechas -->
             <div style="display:flex; gap:12px; align-items:flex-end; margin-bottom:28px; flex-wrap:wrap;">
               <div class="form-group" style="flex:1; min-width:140px;">
-                <label>Desde</label>
+                <label for="desde">Desde</label>
                 <input
+                    id="desde"
                     type="date"
                     [value]="fechaDesde()"
                     (change)="fechaDesde.set($any($event.target).value)"
@@ -49,8 +51,9 @@ import { DecimalPipe } from '@angular/common';
                     [max]="fechaHasta() || fechaMax()">
               </div>
               <div class="form-group" style="flex:1; min-width:140px;">
-                <label>Hasta</label>
+                <label for="hasta">Hasta</label>
                 <input
+                    id="hasta"
                     type="date"
                     [value]="fechaHasta()"
                     (change)="fechaHasta.set($any($event.target).value)"
@@ -72,9 +75,9 @@ import { DecimalPipe } from '@angular/common';
             } @else {
 
               <!-- Promedio -->
-              <div class="card" style="display:flex; align-items:center; gap:24px; margin-bottom:16px;">
-                <div style="text-align:center;">
-                  <p style="font-family:var(--font-disp); font-size:52px; color:var(--accent); line-height:1;">
+              <div class="card promedio-card" style="display:flex; align-items:center; gap:24px; margin-bottom:16px;">
+                <div class="promedio" style="text-align:center;">
+                  <p class="promedio-valor" style="font-family:var(--font-disp); font-size:52px; color:var(--accent); line-height:1;">
                     {{ promedio() | number:'1.1-1' }}
                   </p>
                   <p style="font-size:12px; color:var(--text-sub);">Promedio general</p>
@@ -90,7 +93,7 @@ import { DecimalPipe } from '@angular/common';
               </div>
 
               <!-- Distribución -->
-              <div class="card">
+              <div class="card distribucion">
                 <p style="font-weight:500; margin-bottom:16px;">Distribución de calificaciones</p>
                 <div style="display:flex; flex-direction:column; gap:10px;">
                   @for (valor of valoresDesc; track valor) {
