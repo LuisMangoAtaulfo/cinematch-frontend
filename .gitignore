@@ -41,3 +41,8 @@ coverage/
 !.dev.vars.example
 .env*
 !.env.example
+
+# Robot Framework (e2e/robot)
+e2e/robot/results/
+e2e/robot/.venv/
+geckodriver*.log
