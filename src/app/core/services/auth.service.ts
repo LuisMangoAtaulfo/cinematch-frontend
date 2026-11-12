@@ -17,6 +17,24 @@ import {
   LOGOUT_ADMIN
 } from '../graphql/mutations';
 
+/**
+ * Normaliza errores de Apollo Client v4 (CombinedGraphQLErrors) a { graphQLErrors: [...] }.
+ * Filtra el error técnico "non null type" de GraphQL para mostrar solo el mensaje útil.
+ */
+function normalizarErrorGraphQL(error: any): { graphQLErrors: { message: string }[] } {
+  // Error de red (backend caído, CORS, sin conexión): "Http failure response ... 0 Unknown Error"
+  const status = error?.status ?? error?.networkError?.status ?? error?.cause?.status;
+  if (status === 0 || /Http failure|Unknown Error|Failed to fetch/i.test(error?.message ?? '')) {
+    return { graphQLErrors: [{ message: 'No se pudo conectar con el servidor. Intenta más tarde.' }] };
+  }
+  const lista: { message: string }[] =
+    error?.graphQLErrors?.length ? error.graphQLErrors :
+    error?.errors?.length ? error.errors :
+    [{ message: error?.message ?? 'Error inesperado' }];
+  const utiles = lista.filter(e => !/non null type|non-nullable/i.test(e?.message ?? ''));
+  return { graphQLErrors: utiles.length ? utiles : lista };
+}
+
 const TOKEN_KEY = 'cm_token';
 const USER_KEY  = 'cm_user';
 
@@ -54,14 +72,7 @@ export class AuthService {
           this.persist(res);
           return res;
         }),
-        catchError(error => {
-          if (error.graphQLErrors && error.graphQLErrors.length > 0) {
-            return throwError(() => error);
-          }
-          return throwError(() => ({
-            graphQLErrors: [{ message: error.message }]
-          }));
-        })
+        catchError(error => throwError(() => normalizarErrorGraphQL(error)))
       );
   }
 
@@ -85,16 +96,7 @@ export class AuthService {
           this.persist(res);
           return res;
         }),
-        catchError(error => {
-          // Si es un error de Apollo con graphQLErrors, propagarlo tal cual
-          if (error.graphQLErrors && error.graphQLErrors.length > 0) {
-            return throwError(() => error);
-          }
-          // Si es un Error simple, envolverlo en un objeto con graphQLErrors
-          return throwError(() => ({
-            graphQLErrors: [{ message: error.message }]
-          }));
-        })
+        catchError(error => throwError(() => normalizarErrorGraphQL(error)))
       );
   }
 
@@ -117,14 +119,7 @@ export class AuthService {
           this.persist(res);
           return res;
         }),
-        catchError(error => {
-          if (error.graphQLErrors && error.graphQLErrors.length > 0) {
-            return throwError(() => error);
-          }
-          return throwError(() => ({
-            graphQLErrors: [{ message: error.message }]
-          }));
-        })
+        catchError(error => throwError(() => normalizarErrorGraphQL(error)))
       );
   }
 
