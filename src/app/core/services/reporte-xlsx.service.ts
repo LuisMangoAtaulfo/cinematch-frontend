@@ -18,8 +18,6 @@ export interface HojaReporte {
   columnas: ColumnaReporte[];
   filas: (string | number | null)[][];
   totales?: (string | number | null)[];
-  /** Índices (base 0) de columnas que llevan barras de datos. */
-  barrasDatos?: number[];
   /** Escala de color para una columna numérica. */
   escalaColor?: { columna: number; minimo: number; maximo: number };
 }
@@ -52,29 +50,19 @@ export interface TablaDestacadaReporte {
   titulo: string;
   columnas: ColumnaReporte[];
   filas: (string | number | null)[][];
-  columnaBarras?: number;
 }
 
-export interface ResumenEjecutivo {
+export interface ResumenReporte {
   titulo: string;
-  lectura: string;
   kpis: KpiReporte[];
   indicadores: IndicadorReporte[];
-  hallazgos: string[];
-  recomendaciones: string[];
   destacada?: TablaDestacadaReporte;
-}
-
-export interface MetodologiaReporte {
-  titulo: string;
-  puntos: string[];
 }
 
 export interface ReporteXlsx {
   nombreArchivo: string;
   portada?: PortadaReporte;
-  resumen?: ResumenEjecutivo;
-  metodologia?: MetodologiaReporte;
+  resumen?: ResumenReporte;
   hojas: HojaReporte[];
 }
 
@@ -102,7 +90,7 @@ const FORMATO_NUMERO: Record<TipoColumna, string | undefined> = {
 };
 
 /**
- * Genera reportes XLSX ejecutivos en el navegador con ExcelJS.
+ * Genera reportes XLSX en el navegador con ExcelJS.
  * La dependencia se carga solo al exportar para no afectar el bundle inicial.
  */
 @Injectable({ providedIn: 'root' })
@@ -114,7 +102,7 @@ export class ReporteXlsxService {
     libro.creator = 'CineMatch';
     libro.created = new Date();
     libro.title = reporte.portada?.titulo ?? 'Reporte CineMatch';
-    libro.subject = reporte.portada?.subtitulo ?? 'Reporte ejecutivo';
+    libro.subject = reporte.portada?.subtitulo ?? 'Reporte';
     libro.company = 'CineMatch';
     libro.keywords = 'cinematch, dashboard, reporte, xlsx';
     libro.description = 'Reporte generado automáticamente por CineMatch';
@@ -129,10 +117,6 @@ export class ReporteXlsxService {
 
     for (const hoja of reporte.hojas) {
       this.agregarHoja(libro, hoja);
-    }
-
-    if (reporte.metodologia) {
-      this.agregarMetodologia(libro, reporte.metodologia);
     }
 
     const contenido = await libro.xlsx.writeBuffer();
@@ -218,10 +202,10 @@ export class ReporteXlsxService {
     nota.font = { size: 9, italic: true, color: { argb: COLOR.textoSuave } };
   }
 
-  // ── Resumen ejecutivo ───────────────────────────────────
+  // ── Resumen ─────────────────────────────────────────────
 
-  private agregarResumen(libro: Workbook, datos: ResumenEjecutivo, periodo: string): void {
-    const hoja = libro.addWorksheet('Resumen ejecutivo', {
+  private agregarResumen(libro: Workbook, datos: ResumenReporte, periodo: string): void {
+    const hoja = libro.addWorksheet('Resumen', {
       properties: { tabColor: { argb: COLOR.acento } },
     });
 
@@ -293,23 +277,6 @@ export class ReporteXlsxService {
     hoja.getRow(8).height = 18;
 
     let fila = 10;
-    hoja.getCell(fila, 1).value = 'Lectura ejecutiva';
-    hoja.mergeCells(fila, 1, fila, 8);
-    hoja.getCell(fila, 1).font = { bold: true, size: 12, color: { argb: COLOR.azul } };
-    fila += 1;
-
-    this.pintarRango(hoja, fila, 1, fila + 2, 8, COLOR.fondoSuave);
-    this.bordeRango(hoja, fila, 1, fila + 2, 8);
-    hoja.mergeCells(fila, 1, fila + 2, 8);
-    const lectura = hoja.getCell(fila, 1);
-    lectura.value = datos.lectura;
-    lectura.font = { size: 11, color: { argb: COLOR.texto } };
-    lectura.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
-    hoja.getRow(fila).height = 22;
-    hoja.getRow(fila + 1).height = 22;
-    hoja.getRow(fila + 2).height = 22;
-
-    fila += 4;
     hoja.getCell(fila, 1).value = 'Indicadores vs meta';
     hoja.mergeCells(fila, 1, fila, 8);
     hoja.getCell(fila, 1).font = { bold: true, size: 12, color: { argb: COLOR.azul } };
@@ -323,7 +290,6 @@ export class ReporteXlsxService {
     });
     fila += 1;
 
-    const filaInicioIndicadores = fila;
     for (const indicador of datos.indicadores) {
       hoja.getCell(fila, 1).value = indicador.indicador;
       hoja.getCell(fila, 2).value = indicador.valor;
@@ -341,20 +307,10 @@ export class ReporteXlsxService {
       }
       fila += 1;
     }
-    const filaFinIndicadores = fila - 1;
 
-    if (filaFinIndicadores >= filaInicioIndicadores) {
-      hoja.addConditionalFormatting({
-        ref: `B${filaInicioIndicadores}:B${filaFinIndicadores}`,
-        rules: [this.reglaBarras()],
-      });
-    }
     hoja.getRow(filaEncabezadoIndicadores).height = 20;
 
-    fila += 1;
-    this.agregarListaDoble(hoja, fila, 'Hallazgos', datos.hallazgos, 'Recomendaciones', datos.recomendaciones);
-    fila += Math.max(datos.hallazgos.length, datos.recomendaciones.length) + 2;
-
+    fila += 2;
     if (datos.destacada) {
       fila = this.agregarTablaDestacada(hoja, fila, datos.destacada);
     }
@@ -363,44 +319,6 @@ export class ReporteXlsxService {
     const nota = hoja.getCell(fila + 1, 1);
     nota.value = 'Los valores se calculan con los datos filtrados del periodo seleccionado.';
     nota.font = { size: 9, italic: true, color: { argb: COLOR.textoSuave } };
-  }
-
-  private agregarListaDoble(
-    hoja: Worksheet,
-    fila: number,
-    tituloIzquierda: string,
-    izquierda: string[],
-    tituloDerecha: string,
-    derecha: string[],
-  ): void {
-    hoja.getCell(fila, 1).value = tituloIzquierda;
-    hoja.mergeCells(fila, 1, fila, 4);
-    hoja.getCell(fila, 1).font = { bold: true, size: 12, color: { argb: COLOR.azul } };
-
-    hoja.getCell(fila, 5).value = tituloDerecha;
-    hoja.mergeCells(fila, 5, fila, 8);
-    hoja.getCell(fila, 5).font = { bold: true, size: 12, color: { argb: COLOR.azul } };
-
-    const totalFilas = Math.max(izquierda.length, derecha.length);
-    for (let indice = 0; indice < totalFilas; indice += 1) {
-      const numeroFila = fila + 1 + indice;
-      this.pintarRango(hoja, numeroFila, 1, numeroFila, 8, COLOR.fondoSuave);
-      this.bordeRango(hoja, numeroFila, 1, numeroFila, 8);
-
-      hoja.mergeCells(numeroFila, 1, numeroFila, 4);
-      const celdaIzquierda = hoja.getCell(numeroFila, 1);
-      celdaIzquierda.value = izquierda[indice] ? `•  ${izquierda[indice]}` : '';
-      celdaIzquierda.font = { size: 10, color: { argb: COLOR.texto } };
-      celdaIzquierda.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
-
-      hoja.mergeCells(numeroFila, 5, numeroFila, 8);
-      const celdaDerecha = hoja.getCell(numeroFila, 5);
-      celdaDerecha.value = derecha[indice] ? `•  ${derecha[indice]}` : '';
-      celdaDerecha.font = { size: 10, color: { argb: COLOR.texto } };
-      celdaDerecha.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
-
-      hoja.getRow(numeroFila).height = 26;
-    }
   }
 
   private agregarTablaDestacada(hoja: Worksheet, fila: number, datos: TablaDestacadaReporte): number {
@@ -436,14 +354,6 @@ export class ReporteXlsxService {
         }
       });
       fila += 1;
-    }
-
-    if (datos.columnaBarras != null && fila > filaInicio) {
-      const letra = this.letraColumna(datos.columnaBarras);
-      hoja.addConditionalFormatting({
-        ref: `${letra}${filaInicio}:${letra}${fila - 1}`,
-        rules: [this.reglaBarras()],
-      });
     }
 
     hoja.getRow(filaEncabezado).height = 20;
@@ -555,16 +465,6 @@ export class ReporteXlsxService {
       };
     }
 
-    for (const indice of datos.barrasDatos ?? []) {
-      if (filaFin >= filaInicio) {
-        const letra = this.letraColumna(indice);
-        hoja.addConditionalFormatting({
-          ref: `${letra}${filaInicio}:${letra}${filaFin}`,
-          rules: [this.reglaBarras()],
-        });
-      }
-    }
-
     if (datos.escalaColor && filaFin >= filaInicio) {
       const letra = this.letraColumna(datos.escalaColor.columna);
       hoja.addConditionalFormatting({
@@ -590,39 +490,6 @@ export class ReporteXlsxService {
     hoja.headerFooter = this.pieConfidencial();
   }
 
-  private agregarMetodologia(libro: Workbook, datos: MetodologiaReporte): void {
-    const hoja = libro.addWorksheet('Metodología', {
-      properties: { tabColor: { argb: COLOR.textoSuave } },
-    });
-    hoja.columns = [{ width: 4 }, { width: 110 }];
-    hoja.properties.defaultRowHeight = 20;
-    hoja.pageSetup = this.configuracionImpresion('portrait');
-    hoja.headerFooter = this.pieConfidencial();
-
-    this.pintarRango(hoja, 1, 1, 1, 2, COLOR.azul);
-    hoja.mergeCells(1, 1, 1, 2);
-    const titulo = hoja.getCell(1, 1);
-    titulo.value = datos.titulo;
-    titulo.font = { bold: true, size: 14, color: { argb: COLOR.blanco } };
-    titulo.alignment = { vertical: 'middle', indent: 1 };
-    hoja.getRow(1).height = 24;
-
-    let fila = 3;
-    for (const punto of datos.puntos) {
-      hoja.mergeCells(fila, 1, fila, 2);
-      const celda = hoja.getCell(fila, 1);
-      celda.value = `•  ${punto}`;
-      celda.font = { size: 10, color: { argb: COLOR.texto } };
-      celda.alignment = { wrapText: true, vertical: 'top' };
-      this.bordeRango(hoja, fila, 1, fila, 2);
-      if ((fila - 3) % 2 === 1) {
-        this.pintarRango(hoja, fila, 1, fila, 2, COLOR.fondoSuave);
-      }
-      hoja.getRow(fila).height = 32;
-      fila += 1;
-    }
-  }
-
   // ── Utilidades de formato ───────────────────────────────
 
   private estiloEncabezado(celda: { value: unknown; font: unknown; fill: unknown; alignment: unknown }): void {
@@ -633,19 +500,6 @@ export class ReporteXlsxService {
       fgColor: { argb: COLOR.azulMedio },
     };
     (celda as any).alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
-  }
-
-  private reglaBarras(): any {
-    return {
-      type: 'dataBar',
-      minLength: 0,
-      maxLength: 100,
-      gradient: true,
-      border: true,
-      showValue: true,
-      cfvo: [{ type: 'min' }, { type: 'max' }],
-      priority: 1,
-    };
   }
 
   private pintarRango(

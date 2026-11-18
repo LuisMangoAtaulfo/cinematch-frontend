@@ -13,7 +13,6 @@ import {
   formatearFechaCorta,
   generarLinea,
   generarPuntos,
-  generarSparkline,
   normalizarFecha,
   posicionY,
   promedio,
@@ -43,14 +42,13 @@ import {
           <header class="dash__head">
             <div>
               <p class="section-title">Dashboard de actividad y conversión</p>
-              <p class="section-sub">{{ conclusion() }}</p>
             </div>
             <button
               id="btn-exportar-xlsx"
               data-testid="btn-exportar-xlsx"
               class="btn btn--primary"
               [disabled]="!hayDatos() || exportando()"
-              [attr.title]="hayDatos() ? 'Descarga el reporte con los datos del periodo' : 'No hay datos para exportar'"
+              [attr.title]="hayDatos() ? 'Descargar XLSX' : 'No hay datos para exportar'"
               (click)="exportar()">
               {{ exportando() ? 'Generando…' : 'Exportar XLSX' }}
             </button>
@@ -117,43 +115,30 @@ import {
                 <p class="kpi__value">{{ totales().salas | number:'1.0-0' }}</p>
                 <p class="kpi__label">Salas creadas</p>
                 <p class="kpi__detail">{{ totales().diasActivos }} días con actividad</p>
-                <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
-                  <polyline [attr.points]="sparklineSalas()" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
-                </svg>
               </article>
 
               <article class="kpi metric-card" data-testid="kpi-matches">
                 <p class="kpi__value">{{ totales().matches | number:'1.0-0' }}</p>
                 <p class="kpi__label">Matches generados</p>
                 <p class="kpi__detail">{{ totales().conversion | number:'1.1-1' }}% de las salas</p>
-                <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
-                  <polyline [attr.points]="sparklineMatches()" fill="none" stroke="#6366f1" stroke-width="1.5"/>
-                </svg>
               </article>
 
               <article class="kpi metric-card" data-testid="kpi-conversion">
                 <p class="kpi__value">{{ totales().conversion | number:'1.1-1' }}%</p>
                 <p class="kpi__label">Conversión a match</p>
                 <p class="kpi__detail">{{ totales().matches }} matches / {{ totales().salas }} salas</p>
-                <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
-                  <polyline [attr.points]="sparklineConversion()" fill="none" stroke="var(--success)" stroke-width="1.5"/>
-                </svg>
               </article>
 
               <article class="kpi metric-card" data-testid="kpi-activas">
                 <p class="kpi__value">{{ totales().promedioDiario | number:'1.1-1' }}</p>
                 <p class="kpi__label">Promedio diario de salas</p>
                 <p class="kpi__detail">{{ totales().activasUltimoDia }} activas el último día</p>
-                <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
-                  <polyline [attr.points]="sparklineActivas()" fill="none" stroke="#f59e0b" stroke-width="1.5"/>
-                </svg>
               </article>
             </section>
 
             <section class="charts">
               <article class="card chart" data-testid="chart-tendencia">
                 <p class="chart__title">Salas y matches por día</p>
-                <p class="chart__sub">Misma escala para comparar el volumen diario de ambos eventos.</p>
                 <svg [attr.viewBox]="'0 0 ' + chartWidth + ' ' + chartHeight" role="img"
                      aria-label="Evolución diaria de salas y matches">
                   @for (linea of lineasGuia(); track $index) {
@@ -201,12 +186,11 @@ import {
                   <span class="legend__item"><i class="legend__dot legend__dot--accent"></i>Salas</span>
                   <span class="legend__item"><i class="legend__dot legend__dot--indigo"></i>Matches</span>
                 </div>
-                <p class="chart-hint">{{ detalleHover() || 'Pasa el cursor sobre un punto para ver el detalle.' }}</p>
+                <p class="chart-hint">{{ detalleHover() }}</p>
               </article>
 
               <article class="card chart" data-testid="chart-slopegraph">
                 <p class="chart__title">Antes y después del periodo</p>
-                <p class="chart__sub">Promedio diario en la primera y la segunda mitad.</p>
                 @if (slopegraph(); as slope) {
                   <svg viewBox="0 0 360 240" role="img"
                        aria-label="Comparación del promedio diario entre la primera y la segunda mitad">
@@ -244,7 +228,6 @@ import {
                     <span class="legend__item"><i class="legend__dot legend__dot--accent"></i>Salas/día</span>
                     <span class="legend__item"><i class="legend__dot legend__dot--indigo"></i>Matches/día</span>
                   </div>
-                  <p class="chart-hint">{{ slope.resumen }}</p>
                 } @else {
                   <p class="empty__hint">Se necesitan al menos dos días con actividad para comparar mitades.</p>
                 }
@@ -253,7 +236,6 @@ import {
 
             <article class="card chart" data-testid="chart-barras-semana">
               <p class="chart__title">Promedio de salas por día de la semana</p>
-              <p class="chart__sub">Ayuda a decidir en qué días conviene impulsar la actividad.</p>
               <svg [attr.viewBox]="'0 0 ' + chartWidth + ' ' + barChartHeight" role="img"
                    aria-label="Promedio de salas creadas por día de la semana">
                 <line [attr.x1]="padding" [attr.y1]="barChartHeight - padding"
@@ -272,11 +254,6 @@ import {
                 }
               </svg>
             </article>
-
-            <p class="footnote">
-              Los datos se calculan con el historial diario de la plataforma. El reporte XLSX incluye
-              el resumen del periodo, la serie diaria y el desglose por día de la semana.
-            </p>
           }
         </div>
       </main>
@@ -286,7 +263,6 @@ import {
     .dash { flex: 1; padding: 28px 24px; }
     .dash__inner { max-width: 1180px; margin: 0 auto; }
     .dash__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
-    .dash__head .section-sub { margin-bottom: 0; max-width: 720px; }
     .export-msg { background: rgba(34, 197, 94, 0.12); border: 1px solid var(--success); color: var(--success); border-radius: var(--radius); padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
     .export-error { background: rgba(239, 68, 68, 0.12); border: 1px solid var(--danger); color: var(--danger); border-radius: var(--radius); padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
     .filters { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 24px; padding: 16px; }
@@ -297,11 +273,9 @@ import {
     .kpi__value { font-family: var(--font-disp); font-size: 30px; line-height: 1.1; color: var(--accent); }
     .kpi__label { font-size: 13px; color: var(--text); }
     .kpi__detail { font-size: 12px; color: var(--text-sub); }
-    .sparkline { width: 100%; height: 22px; margin-top: 8px; }
     .charts { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; margin-bottom: 24px; }
     .chart { padding: 18px; margin-bottom: 0; }
     .chart__title { font-weight: 600; font-size: 14px; margin-bottom: 2px; color: var(--text); }
-    .chart__sub { font-size: 12px; color: var(--text-sub); margin-bottom: 12px; }
     .chart svg { width: 100%; height: auto; display: block; }
     .svg-label { font-size: 10px; fill: var(--text-sub); }
     .svg-value { font-size: 10px; font-weight: 600; fill: var(--text); }
@@ -313,7 +287,6 @@ import {
     .chart-hint { font-size: 12px; color: var(--text-sub); text-align: center; margin-top: 10px; min-height: 18px; }
     .empty { text-align: center; padding: 32px; margin-bottom: 24px; }
     .empty__hint { font-size: 13px; color: var(--text-sub); margin-top: 6px; }
-    .footnote { font-size: 12px; color: var(--text-sub); text-align: center; margin-top: 8px; }
     @media (max-width: 980px) {
       .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .charts { grid-template-columns: 1fr; }
@@ -392,22 +365,6 @@ export class DashboardActividadComponent implements OnInit {
     };
   });
 
-  conclusion = computed(() => {
-    const lista = this.historialFiltrado();
-    if (!lista.length) return 'Sin datos en el periodo seleccionado.';
-
-    const mitad = Math.floor(lista.length / 2);
-    const primera = lista.slice(0, mitad);
-    const segunda = lista.slice(lista.length - mitad);
-    const conversion = this.totales().conversion.toFixed(1);
-    const inicio = primera.length ? promedio(primera.map((dia) => dia.totalSalas)) : 0;
-    const fin = segunda.length ? promedio(segunda.map((dia) => dia.totalSalas)) : 0;
-    const cambio = inicio ? ((fin - inicio) / inicio) * 100 : 0;
-    const direccion = cambio >= 0 ? 'creció' : 'bajó';
-
-    return `${conversion}% de las salas terminaron en match; la actividad ${direccion} ${Math.abs(cambio).toFixed(1)}% en la segunda mitad del periodo.`;
-  });
-
   periodoAnterior = computed(() => {
     const actual = this.historialFiltrado();
     if (!actual.length) return null;
@@ -433,56 +390,6 @@ export class DashboardActividadComponent implements OnInit {
       conversion: salas ? (matches / salas) * 100 : 0,
       promedioDiario: salas / previo.length,
     };
-  });
-
-  hallazgos = computed(() => {
-    const lista = this.historialFiltrado();
-    if (!lista.length) return [];
-
-    const totales = this.totales();
-    const mejorDia = this.mejorDiaSemana();
-    const pico = [...lista].sort((a, b) => b.totalSalas - a.totalSalas)[0];
-    const mitades = this.compararMitades();
-    const resultado: string[] = [
-      `El periodo cerró con ${totales.salas} salas y ${totales.matches} matches (${totales.conversion.toFixed(1)}% de conversión).`,
-    ];
-
-    if (mejorDia) {
-      resultado.push(`El ${mejorDia.dia} concentra el mayor promedio de salas (${mejorDia.promedio.toFixed(1)} por día).`);
-    }
-    if (pico) {
-      resultado.push(`El ${formatearFecha(pico.fecha)} fue el día con más salas (${pico.totalSalas}).`);
-    }
-    if (mitades) {
-      resultado.push(
-        `La actividad ${mitades.cambio >= 0 ? 'creció' : 'bajó'} ${Math.abs(mitades.cambio).toFixed(1)}% en la segunda mitad del periodo.`,
-      );
-    }
-
-    return resultado;
-  });
-
-  recomendaciones = computed(() => {
-    const totales = this.totales();
-    const mejorDia = this.mejorDiaSemana();
-    const mitades = this.compararMitades();
-    const resultado: string[] = [];
-
-    if (totales.conversion < 50) {
-      resultado.push('Revisar el flujo de filtros y swipe para elevar la conversión por encima del 50%.');
-    } else {
-      resultado.push('Mantener las condiciones actuales del flujo: la conversión supera la meta del 50%.');
-    }
-    if (mejorDia) {
-      resultado.push(`Concentrar campañas y recordatorios los ${mejorDia.dia}, cuando hay más actividad.`);
-    }
-    if (mitades && mitades.cambio < 0) {
-      resultado.push('Investigar la caída de actividad de la segunda mitad y recuperar a los usuarios inactivos.');
-    } else {
-      resultado.push('Documentar las acciones del periodo para replicar el crecimiento observado.');
-    }
-
-    return resultado;
   });
 
   indicadores = computed<IndicadorReporte[]>(() => {
@@ -537,13 +444,6 @@ export class DashboardActividadComponent implements OnInit {
     if (!lista.length) return 10;
     return redondearMaximo(Math.max(...lista.map((dia) => Math.max(dia.totalSalas, dia.totalMatches)), 1));
   });
-
-  sparklineSalas = computed(() => generarSparkline(this.historialFiltrado().map((dia) => dia.totalSalas)));
-  sparklineMatches = computed(() => generarSparkline(this.historialFiltrado().map((dia) => dia.totalMatches)));
-  sparklineActivas = computed(() => generarSparkline(this.historialFiltrado().map((dia) => dia.salasActivas)));
-  sparklineConversion = computed(() =>
-    generarSparkline(this.historialFiltrado().map((dia) => (dia.totalSalas ? (dia.totalMatches / dia.totalSalas) * 100 : 0))),
-  );
 
   lineaSalas = computed(() => generarLinea(this.historialFiltrado().map((dia) => dia.totalSalas), this.opcionesLinea()));
   lineaMatches = computed(() => generarLinea(this.historialFiltrado().map((dia) => dia.totalMatches), this.opcionesLinea()));
@@ -623,8 +523,6 @@ export class DashboardActividadComponent implements OnInit {
     const maximo = redondearMaximo(Math.max(salasInicio, salasFin, matchesInicio, matchesFin, 1));
     const alto = 240;
     const padding = 40;
-    const delta = salasInicio ? ((salasFin - salasInicio) / salasInicio) * 100 : 0;
-    const direccion = delta >= 0 ? 'subió' : 'bajó';
 
     return {
       salasInicio,
@@ -637,7 +535,6 @@ export class DashboardActividadComponent implements OnInit {
       matchesFinY: posicionY(matchesFin, alto, padding, maximo),
       arriba: padding,
       abajo: alto - padding,
-      resumen: `Las salas/día ${direccion} ${Math.abs(delta).toFixed(1)}% entre mitades.`,
     };
   });
 
@@ -725,19 +622,17 @@ export class DashboardActividadComponent implements OnInit {
         nombreArchivo: 'cinematch-dashboard-actividad',
         portada: {
           titulo: 'Actividad y conversión',
-          subtitulo: 'Reporte ejecutivo de operación',
+          subtitulo: 'Operación',
           responsable: 'anabyt · anaelisaahumada11@gmail.com',
           periodo,
           indice: [
-            'Resumen ejecutivo',
+            'Resumen',
             'Serie diaria de actividad',
             'Promedio por día de la semana',
-            'Metodología y definición de indicadores',
           ],
         },
         resumen: {
           titulo: 'Actividad y conversión',
-          lectura: this.conclusion(),
           kpis: [
             {
               etiqueta: 'Salas creadas',
@@ -769,8 +664,6 @@ export class DashboardActividadComponent implements OnInit {
             },
           ],
           indicadores: this.indicadores(),
-          hallazgos: this.hallazgos(),
-          recomendaciones: this.recomendaciones(),
           destacada: {
             titulo: 'Top 5 días por actividad',
             columnas: [
@@ -780,20 +673,7 @@ export class DashboardActividadComponent implements OnInit {
               { titulo: 'Conversión (%)', ancho: 14, tipo: 'porcentaje' },
             ],
             filas: this.topDias(),
-            columnaBarras: 1,
           },
-        },
-        metodologia: {
-          titulo: 'Metodología del reporte',
-          puntos: [
-            'Fuente: consulta GraphQL historialMetricas, que agrupa la actividad por fecha de creación de la sala.',
-            'Salas creadas: total de salas registradas en el periodo seleccionado.',
-            'Matches: salas del periodo que generaron al menos un match.',
-            'Conversión a match: matches del periodo divididos entre salas creadas, expresada en porcentaje.',
-            'Promedio diario: salas creadas entre los días del periodo con información.',
-            'Comparativo: ventana inmediatamente anterior de la misma duración que el periodo seleccionado.',
-            'El reporte exporta exactamente los datos filtrados en el dashboard al momento de la descarga.',
-          ],
         },
         hojas: [
           {
@@ -825,7 +705,6 @@ export class DashboardActividadComponent implements OnInit {
               Number(totales.conversion.toFixed(1)),
               '',
             ],
-            barrasDatos: [1, 3, 4],
             escalaColor: { columna: 5, minimo: 1, maximo: 10 },
           },
           {
@@ -845,11 +724,10 @@ export class DashboardActividadComponent implements OnInit {
               barra.total,
               barra.dias,
             ]),
-            barrasDatos: [1, 2],
           },
         ],
       });
-      this.msgExport.set('Reporte ejecutivo XLSX generado con los datos del periodo.');
+      this.msgExport.set('Reporte XLSX generado con los datos del periodo.');
     } catch {
       this.errorExport.set('No se pudo generar el reporte. Intenta de nuevo.');
     } finally {
