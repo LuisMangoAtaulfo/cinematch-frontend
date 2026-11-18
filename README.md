@@ -225,8 +225,8 @@ Abre `report-<fecha>.html` para el resumen y `log-<fecha>.html` para el detalle 
 Los dashboards `/admin/dashboard` y `/admin/dashboard/tendencias` exportan
 reportes generados en el navegador con ExcelJS:
 
-- Portada, Resumen con KPIs, hojas de detalle y Metodología.
-- Tablas formateadas, barras de datos y escala de color (sin gráficas de imagen).
+- Portada, Resumen con KPIs y hojas de detalle.
+- Tablas formateadas y escala de color (sin gráficas de imagen).
 - La librería se carga solo al pulsar “Exportar XLSX”.
 - Las pruebas validan las hojas con `e2e/robot/verificar_xlsx.py`.
 

@@ -176,12 +176,11 @@ Hojas esperadas:
 
 | Reporte | Hojas |
 |---|---|
-| Actividad | Portada · Resumen · Serie diaria · Día de semana · Metodología |
-| Satisfacción | Portada · Resumen · Serie diaria · Calificaciones · Metodología |
+| Actividad | Portada · Resumen · Serie diaria · Día de semana |
+| Satisfacción | Portada · Resumen · Serie diaria · Calificaciones |
 
 El reporte se genera en el navegador con ExcelJS y exporta solo el periodo
-filtrado. No usa gráficas de imagen: tablas formateadas, barras de datos y
-escala de color.
+filtrado. No usa gráficas de imagen: tablas formateadas y escala de color.
 
 ---
 

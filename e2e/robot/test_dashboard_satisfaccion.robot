@@ -119,7 +119,7 @@ TC-DASH-B-011: Reporte XLSX con hojas del reporte
     Click Button    ${BTN_EXPORTAR_XLSX}
     Esperar Descarga XLSX    cinematch-dashboard-satisfaccion
     Verificar Hojas XLSX    cinematch-dashboard-satisfaccion
-    ...    Portada    Resumen    Serie diaria    Calificaciones    Metodología
+    ...    Portada    Resumen    Serie diaria    Calificaciones
 
 *** Keywords ***
 Ir A Dashboard Satisfaccion

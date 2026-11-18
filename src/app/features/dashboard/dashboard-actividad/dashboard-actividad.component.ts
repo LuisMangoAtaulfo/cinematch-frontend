@@ -629,7 +629,6 @@ export class DashboardActividadComponent implements OnInit {
             'Resumen',
             'Serie diaria de actividad',
             'Promedio por día de la semana',
-            'Metodología',
           ],
         },
         resumen: {
@@ -674,15 +673,7 @@ export class DashboardActividadComponent implements OnInit {
               { titulo: 'Conversión (%)', ancho: 14, tipo: 'porcentaje' },
             ],
             filas: this.topDias(),
-            columnaBarras: 1,
           },
-        },
-        metodologia: {
-          titulo: 'Metodología',
-          puntos: [
-            'Fuente: consulta GraphQL historialMetricas, que agrupa la actividad por fecha de creación de la sala.',
-            'Comparativo: ventana inmediatamente anterior de la misma duración que el periodo seleccionado.',
-          ],
         },
         hojas: [
           {
@@ -714,7 +705,6 @@ export class DashboardActividadComponent implements OnInit {
               Number(totales.conversion.toFixed(1)),
               '',
             ],
-            barrasDatos: [1, 3, 4],
             escalaColor: { columna: 5, minimo: 1, maximo: 10 },
           },
           {
@@ -734,7 +724,6 @@ export class DashboardActividadComponent implements OnInit {
               barra.total,
               barra.dias,
             ]),
-            barrasDatos: [1, 2],
           },
         ],
       });

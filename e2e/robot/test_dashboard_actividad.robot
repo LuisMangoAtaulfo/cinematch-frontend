@@ -119,7 +119,7 @@ TC-DASH-A-011: Reporte XLSX con hojas del reporte
     Click Button    ${BTN_EXPORTAR_XLSX}
     Esperar Descarga XLSX    cinematch-dashboard-actividad
     Verificar Hojas XLSX    cinematch-dashboard-actividad
-    ...    Portada    Resumen    Serie diaria    Día de semana    Metodología
+    ...    Portada    Resumen    Serie diaria    Día de semana
 
 *** Keywords ***
 Ir A Dashboard Actividad

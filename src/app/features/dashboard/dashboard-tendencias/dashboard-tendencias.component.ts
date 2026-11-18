@@ -643,7 +643,6 @@ export class DashboardTendenciasComponent implements OnInit {
             'Resumen',
             'Serie diaria de satisfacción',
             'Detalle de calificaciones',
-            'Metodología',
           ],
         },
         resumen: {
@@ -687,15 +686,7 @@ export class DashboardTendenciasComponent implements OnInit {
               { titulo: 'Porcentaje (%)', ancho: 16, tipo: 'porcentaje' },
             ],
             filas: this.distribucionTabla(),
-            columnaBarras: 1,
           },
-        },
-        metodologia: {
-          titulo: 'Metodología',
-          puntos: [
-            'Fuente: consulta GraphQL retroalimentacion, con el registro de calificaciones de la plataforma.',
-            'Comparativo: ventana inmediatamente anterior de la misma duración que el periodo seleccionado.',
-          ],
         },
         hojas: [
           {
@@ -724,7 +715,6 @@ export class DashboardTendenciasComponent implements OnInit {
               Number(resumen.satisfaccion.toFixed(1)),
               Number(resumen.riesgo.toFixed(1)),
             ],
-            barrasDatos: [2, 3, 4],
             escalaColor: { columna: 1, minimo: 1, maximo: 10 },
           },
           {
