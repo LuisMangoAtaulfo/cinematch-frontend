@@ -52,6 +52,7 @@ while [[ $# -gt 0 ]]; do
             echo "Opciones:"
             echo "  --suite, -s <nombre>   Ejecutar solo una suite específica"
             echo "                         Opciones: auth, salas, filtros, swipe, chat, admin, perfil_resultados, seguridad, e2e"
+            echo "                                   dashboard_actividad"
             echo "  --tag, -t <tag>        Ejecutar solo tests con el tag especificado"
             echo "                         Tags: positivo, negativo, validacion, ui, seguridad, e2e, manual, diagnostico"
             echo "  --dry-run, -d          Mostrar qué tests se ejecutarían sin ejecutarlos"
@@ -63,6 +64,7 @@ while [[ $# -gt 0 ]]; do
             echo "  ./run_tests.sh --suite auth                 # Solo tests de autenticación"
             echo "  ./run_tests.sh --tag positivo               # Solo tests con tag 'positivo'"
             echo "  ./run_tests.sh --suite e2e --tag crítico    # Tests E2E críticos"
+            echo "  ./run_tests.sh --suite dashboard_actividad  # Dashboard de actividad y conversión"
             echo "  ./run_tests.sh --headless                   # Ejecutar en modo headless"
             echo "  ./run_tests.sh --dry-run                    # Ver qué se ejecutaría"
             exit 0

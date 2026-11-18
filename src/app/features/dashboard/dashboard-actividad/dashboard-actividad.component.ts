@@ -1,10 +1,24 @@
-import { Component, OnInit, signal, computed } from '@angular/core';
+import { Component, OnInit, computed, signal } from '@angular/core';
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
-import { MetricasService, MetricasDia } from '../../../core/services/admin.service';
-import { RetroalimentacionService } from '../../../core/services/admin.service';
-import { CalificacionResponse } from '../../../core/models';
+import { MetricasDia, MetricasService } from '../../../core/services/admin.service';
+import { ReporteXlsxService } from '../../../core/services/reporte-xlsx.service';
+import {
+  ORDEN_SEMANA,
+  PuntoGrafica,
+  diaSemana,
+  formatearFecha,
+  formatearFechaCorta,
+  generarLinea,
+  generarPuntos,
+  generarSparkline,
+  normalizarFecha,
+  posicionY,
+  promedio,
+  redondearMaximo,
+  toDateInput,
+} from '../../../core/utils/dashboard.utils';
 
 @Component({
   selector: 'app-dashboard-actividad',
@@ -15,6 +29,7 @@ import { CalificacionResponse } from '../../../core/models';
       <nav class="navbar">
         <span class="navbar__logo">CineMatch</span>
         <div class="navbar__actions">
+          <a routerLink="/admin/dashboard/tendencias" class="btn btn--ghost btn--sm">Satisfacción</a>
           <a routerLink="/admin/metricas" class="btn btn--ghost btn--sm">Métricas</a>
           <a routerLink="/admin/plataformas" class="btn btn--ghost btn--sm">Plataformas</a>
           <a routerLink="/admin/retroalimentacion" class="btn btn--ghost btn--sm">Retroalimentación</a>
@@ -22,270 +37,325 @@ import { CalificacionResponse } from '../../../core/models';
         </div>
       </nav>
 
-      <div style="flex:1; padding:28px 24px;">
-        <div class="container container--wide" style="margin:0 auto;">
-          <p class="section-title">Dashboard</p>
-          <p class="section-sub">Métricas clave de la plataforma en tiempo real</p>
+      <main class="dash">
+        <div class="dash__inner">
+          <header class="dash__head">
+            <div>
+              <p class="section-title">Dashboard de actividad y conversión</p>
+              <p class="section-sub">{{ conclusion() }}</p>
+            </div>
+            <button
+              id="btn-exportar-xlsx"
+              data-testid="btn-exportar-xlsx"
+              class="btn btn--primary"
+              [disabled]="!hayDatos() || exportando()"
+              [attr.title]="hayDatos() ? 'Descarga el reporte con los datos del periodo' : 'No hay datos para exportar'"
+              (click)="exportar()">
+              {{ exportando() ? 'Generando…' : 'Exportar XLSX' }}
+            </button>
+          </header>
+
+          @if (msgExport()) {
+            <p id="msg-export-ok" data-testid="msg-export-ok" class="export-msg" role="status">
+              {{ msgExport() }}
+            </p>
+          }
+          @if (errorExport()) {
+            <p class="export-error" role="alert">{{ errorExport() }}</p>
+          }
+
+          <section class="card filters" aria-label="Filtros del dashboard">
+            <div class="form-group">
+              <label for="periodo-rapido">Periodo</label>
+              <select id="periodo-rapido" (change)="aplicarPeriodoRapido($any($event.target).value)">
+                <option value="">Personalizado</option>
+                <option value="7">Últimos 7 días</option>
+                <option value="14">Últimos 14 días</option>
+                <option value="30">Últimos 30 días</option>
+                <option value="all">Todo el historial</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="desde">Desde</label>
+              <input id="desde" type="date"
+                     [value]="fechaDesde()"
+                     (change)="fechaDesde.set($any($event.target).value)"
+                     [min]="fechaMin()"
+                     [max]="fechaHasta() || fechaMax()">
+            </div>
+            <div class="form-group">
+              <label for="hasta">Hasta</label>
+              <input id="hasta" type="date"
+                     [value]="fechaHasta()"
+                     (change)="fechaHasta.set($any($event.target).value)"
+                     [min]="fechaDesde() || fechaMin()"
+                     [max]="fechaMax()">
+            </div>
+            @if (fechaDesde() || fechaHasta()) {
+              <button class="btn btn--ghost" (click)="limpiarFiltro()">Limpiar</button>
+            }
+            <p class="filters__resumen">
+              {{ historialFiltrado().length }} días en el periodo
+            </p>
+          </section>
 
           @if (cargando()) {
-            <p style="color:var(--text-sub);">Cargando datos...</p>
-          } @else {
-
-            <!-- Filtro de fechas -->
-            <div style="display:flex; gap:12px; align-items:flex-end; margin-bottom:28px; flex-wrap:wrap;">
-              <div class="form-group" style="flex:1; min-width:140px;">
-                <label for="desde">Desde</label>
-                <input id="desde" type="date"
-                       [value]="fechaDesde()"
-                       (change)="fechaDesde.set($any($event.target).value)"
-                       [min]="fechaMin()"
-                       [max]="fechaHasta() || fechaMax()">
-              </div>
-              <div class="form-group" style="flex:1; min-width:140px;">
-                <label for="hasta">Hasta</label>
-                <input id="hasta" type="date"
-                       [value]="fechaHasta()"
-                       (change)="fechaHasta.set($any($event.target).value)"
-                       [min]="fechaDesde() || fechaMin()"
-                       [max]="fechaMax()">
-              </div>
-              @if (fechaDesde() || fechaHasta()) {
-                <button class="btn btn--ghost" style="height:44px; padding:0 16px;"
-                        (click)="limpiarFiltro()">
-                  Limpiar
-                </button>
-              }
+            <div class="card empty"><p>Cargando datos…</p></div>
+          } @else if (errorCarga()) {
+            <div class="card empty" role="alert">
+              <p>No se pudieron cargar las métricas. Revisa la conexión con el backend.</p>
             </div>
+          } @else if (!hayDatos()) {
+            <div id="dashboard-vacio" data-testid="dashboard-vacio" class="card empty">
+              <p>No hay actividad en el periodo seleccionado.</p>
+              <p class="empty__hint">Ajusta el rango de fechas o limpia el filtro.</p>
+            </div>
+          } @else {
+            <section class="kpis" aria-label="Indicadores principales">
+              <article class="kpi metric-card" data-testid="kpi-salas">
+                <p class="kpi__value">{{ totales().salas | number:'1.0-0' }}</p>
+                <p class="kpi__label">Salas creadas</p>
+                <p class="kpi__detail">{{ totales().diasActivos }} días con actividad</p>
+                <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
+                  <polyline [attr.points]="sparklineSalas()" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+                </svg>
+              </article>
 
-            @if (!historialFiltrado().length) {
-              <div class="card" style="text-align:center; padding:32px;">
-                <p style="color:var(--text-sub);">No hay datos en el rango seleccionado.</p>
-              </div>
-            } @else {
+              <article class="kpi metric-card" data-testid="kpi-matches">
+                <p class="kpi__value">{{ totales().matches | number:'1.0-0' }}</p>
+                <p class="kpi__label">Matches generados</p>
+                <p class="kpi__detail">{{ totales().conversion | number:'1.1-1' }}% de las salas</p>
+                <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
+                  <polyline [attr.points]="sparklineMatches()" fill="none" stroke="#6366f1" stroke-width="1.5"/>
+                </svg>
+              </article>
 
-              <!-- KPIs en zona óptima (superior izquierda) -->
-              <div class="grid-3" style="margin-bottom:32px;">
-                <div class="metric-card">
-                  <p class="metric-value">{{ metricasAgregadas().totalSalas }}</p>
-                  <p class="metric-label">Salas totales</p>
-                  <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none">
-                    <polyline [attr.points]="sparklineSalas()" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
-                  </svg>
-                </div>
-                <div class="metric-card">
-                  <p class="metric-value">{{ metricasAgregadas().salasActivas }}</p>
-                  <p class="metric-label">Salas activas</p>
-                  <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none">
-                    <polyline [attr.points]="sparklineActivas()" fill="none" stroke="var(--success)" stroke-width="1.5"/>
-                  </svg>
-                </div>
-                <div class="metric-card">
-                  <p class="metric-value">{{ metricasAgregadas().totalMatches }}</p>
-                  <p class="metric-label">Matches generados</p>
-                  <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none">
-                    <polyline [attr.points]="sparklineMatches()" fill="none" stroke="#6366f1" stroke-width="1.5"/>
-                  </svg>
-                </div>
-              </div>
+              <article class="kpi metric-card" data-testid="kpi-conversion">
+                <p class="kpi__value">{{ totales().conversion | number:'1.1-1' }}%</p>
+                <p class="kpi__label">Conversión a match</p>
+                <p class="kpi__detail">{{ totales().matches }} matches / {{ totales().salas }} salas</p>
+                <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
+                  <polyline [attr.points]="sparklineConversion()" fill="none" stroke="var(--success)" stroke-width="1.5"/>
+                </svg>
+              </article>
 
-              <!-- Gauge de calificación promedio -->
-              <div class="card gauge" style="margin-bottom:32px;">
-                <p style="font-weight:500; margin-bottom:16px;">Calificación promedio de la plataforma</p>
-                <div style="display:flex; align-items:center; gap:32px;">
-                  <svg class="gauge-chart" width="120" height="120" viewBox="0 0 120 120">
-                    <circle cx="60" cy="60" r="50" fill="none" stroke="var(--surface2)" stroke-width="10"/>
-                    <circle cx="60" cy="60" r="50" fill="none" 
-                            [attr.stroke]="getColorPromedio()"
-                            stroke-width="10"
-                            stroke-linecap="round"
-                            [attr.stroke-dasharray]="getStrokeDashArray()"
-                            stroke-dashoffset="0"
-                            transform="rotate(-90 60 60)"/>
-                    <text x="60" y="60" text-anchor="middle" dominant-baseline="middle"
-                          style="font-size:24px; font-weight:bold; fill:var(--text);">
-                      {{ metricasAgregadas().promedioCalificacion | number:'1.1-1' }}
+              <article class="kpi metric-card" data-testid="kpi-activas">
+                <p class="kpi__value">{{ totales().activasUltimoDia | number:'1.0-0' }}</p>
+                <p class="kpi__label">Salas activas (último día)</p>
+                <p class="kpi__detail">{{ totales().promedioDiario | number:'1.1-1' }} salas/día en promedio</p>
+                <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
+                  <polyline [attr.points]="sparklineActivas()" fill="none" stroke="#f59e0b" stroke-width="1.5"/>
+                </svg>
+              </article>
+            </section>
+
+            <section class="charts">
+              <article class="card chart" data-testid="chart-tendencia">
+                <p class="chart__title">Salas y matches por día</p>
+                <p class="chart__sub">Misma escala para comparar el volumen diario de ambos eventos.</p>
+                <svg [attr.viewBox]="'0 0 ' + chartWidth + ' ' + chartHeight" role="img"
+                     aria-label="Evolución diaria de salas y matches">
+                  @for (linea of lineasGuia(); track $index) {
+                    <line [attr.x1]="padding" [attr.y1]="linea.y"
+                          [attr.x2]="chartWidth - padding" [attr.y2]="linea.y"
+                          stroke="var(--border)" stroke-width="0.5" stroke-dasharray="4,4"/>
+                    <text [attr.x]="padding - 8" [attr.y]="linea.y + 4"
+                          text-anchor="end" class="svg-label">
+                      {{ linea.valor | number:'1.0-0' }}
                     </text>
-                    <text x="60" y="80" text-anchor="middle"
-                          style="font-size:10px; fill:var(--text-sub);">
-                      de 10
-                    </text>
-                  </svg>
-                  <div style="flex:1;">
-                    <p style="font-size:14px; color:var(--text); margin-bottom:8px;">
-                      Basado en <strong>{{ calificaciones().length }}</strong> calificaciones
-                    </p>
-                    <p style="font-size:13px; color:var(--text-sub);">
-                      Distribución:
-                    </p>
-                    <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
-                      @for (valor of [10, 9, 8, 7, 6]; track valor) {
-                        <div style="text-align:center;">
-                          <div style="font-size:18px; font-weight:bold; color:var(--accent);">
-                            {{ getConteoCalificacion(valor) }}
-                          </div>
-                          <div style="font-size:11px; color:var(--text-sub);">
-                            ★{{ valor }}
-                          </div>
-                        </div>
-                      }
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Gráfica de tendencias -->
-              <div class="card line-chart evolucion" style="margin-bottom:32px;">
-                <p style="font-weight:500; margin-bottom:16px;">Evolución de actividad</p>
-                <svg [attr.viewBox]="'0 0 ' + chartWidth + ' ' + chartHeight" 
-                     style="width:100%; height:300px;" 
-                     (mousemove)="onChartMouseMove($event)"
-                     (mouseleave)="tooltipVisible.set(false)">
-                  <!-- Eje Y -->
-                  <line [attr.x1]="padding" [attr.y1]="padding" 
+                  }
+                  <line [attr.x1]="padding" [attr.y1]="padding"
                         [attr.x2]="padding" [attr.y2]="chartHeight - padding"
                         stroke="var(--border)" stroke-width="1"/>
-                  <!-- Eje X -->
                   <line [attr.x1]="padding" [attr.y1]="chartHeight - padding"
                         [attr.x2]="chartWidth - padding" [attr.y2]="chartHeight - padding"
                         stroke="var(--border)" stroke-width="1"/>
-                  
-                  <!-- Líneas de grid horizontales -->
-                  @for (i of [0.25, 0.5, 0.75, 1]; track i) {
-                    <line [attr.x1]="padding" 
-                          [attr.y1]="chartHeight - padding - (chartHeight - 2*padding) * i"
-                          [attr.x2]="chartWidth - padding"
-                          [attr.y2]="chartHeight - padding - (chartHeight - 2*padding) * i"
-                          stroke="var(--border)" stroke-width="0.5" stroke-dasharray="4,4"/>
-                    <text [attr.x]="padding - 8" 
-                          [attr.y]="chartHeight - padding - (chartHeight - 2*padding) * i + 4"
-                          text-anchor="end" style="font-size:10px; fill:var(--text-sub);">
-                      {{ maxValor() * i | number:'1.0-0' }}
-                    </text>
-                  }
-                  
-                  <!-- Línea de salas -->
-                  <polyline [attr.points]="lineaSalas()" 
-                            fill="none" stroke="var(--accent)" stroke-width="2"/>
-                  
-                  <!-- Línea de matches -->
-                  <polyline [attr.points]="lineaMatches()" 
-                            fill="none" stroke="#6366f1" stroke-width="2"/>
-                  
-                  <!-- Puntos de datos -->
+
+                  <polyline [attr.points]="lineaSalas()" fill="none" stroke="var(--accent)" stroke-width="2"/>
+                  <polyline [attr.points]="lineaMatches()" fill="none" stroke="#6366f1" stroke-width="2"/>
+
                   @for (punto of puntosSalas(); track $index) {
-                    <circle [attr.cx]="punto.x" [attr.cy]="punto.y" r="3" 
-                            fill="var(--accent)" 
-                            (mouseenter)="mostrarTooltip(punto, 'salas')"
-                            (mouseleave)="tooltipVisible.set(false)"/>
+                    <circle [attr.cx]="punto.x" [attr.cy]="punto.y" r="3.5"
+                            fill="var(--accent)" stroke="var(--surface)" stroke-width="1.5"
+                            (mouseenter)="mostrarDetalle($index)"
+                            (mouseleave)="limpiarDetalle()">
+                      <title>{{ detalleDe($index) }}</title>
+                    </circle>
                   }
-                  
                   @for (punto of puntosMatches(); track $index) {
-                    <circle [attr.cx]="punto.x" [attr.cy]="punto.y" r="3" 
-                            fill="#6366f1"
-                            (mouseenter)="mostrarTooltip(punto, 'matches')"
-                            (mouseleave)="tooltipVisible.set(false)"/>
+                    <circle [attr.cx]="punto.x" [attr.cy]="punto.y" r="3.5"
+                            fill="#6366f1" stroke="var(--surface)" stroke-width="1.5"
+                            (mouseenter)="mostrarDetalle($index)"
+                            (mouseleave)="limpiarDetalle()">
+                      <title>{{ detalleDe($index) }}</title>
+                    </circle>
                   }
-                  
-                  <!-- Etiquetas del eje X (fechas) -->
-                  @for (fecha of etiquetasFechas(); track $index) {
-                    <text [attr.x]="padding + (chartWidth - 2*padding) * ($index / (etiquetasFechas().length - 1 || 1))"
-                          [attr.y]="chartHeight - padding + 16"
-                          text-anchor="middle" style="font-size:10px; fill:var(--text-sub);">
-                      {{ fecha }}
-                    </text>
+
+                  @for (etiqueta of etiquetasX(); track $index) {
+                    <text [attr.x]="etiqueta.x" [attr.y]="chartHeight - padding + 16"
+                          text-anchor="middle" class="svg-label">{{ etiqueta.label }}</text>
                   }
                 </svg>
-                
-                <!-- Leyenda -->
-                <div style="display:flex; gap:24px; justify-content:center; margin-top:16px;">
-                  <div style="display:flex; align-items:center; gap:8px;">
-                    <div style="width:16px; height:3px; background:var(--accent);"></div>
-                    <span style="font-size:13px; color:var(--text-sub);">Salas</span>
-                  </div>
-                  <div style="display:flex; align-items:center; gap:8px;">
-                    <div style="width:16px; height:3px; background:#6366f1;"></div>
-                    <span style="font-size:13px; color:var(--text-sub);">Matches</span>
-                  </div>
+                <div class="legend">
+                  <span class="legend__item"><i class="legend__dot legend__dot--accent"></i>Salas</span>
+                  <span class="legend__item"><i class="legend__dot legend__dot--indigo"></i>Matches</span>
                 </div>
-                
-                <!-- Tooltip -->
-                @if (tooltipVisible()) {
-                  <div class="chart-tooltip" [style.left.px]="tooltipX()" [style.top.px]="tooltipY()">
-                    <p style="font-weight:500; margin-bottom:4px;">{{ tooltipFecha() }}</p>
-                    <p style="font-size:12px;">
-                      @if (tooltipTipo() === 'salas') {
-                        Salas: <strong>{{ tooltipValor() }}</strong>
-                      } @else {
-                        Matches: <strong>{{ tooltipValor() }}</strong>
-                      }
-                    </p>
+                <p class="chart-hint">{{ detalleHover() || 'Pasa el cursor sobre un punto para ver el detalle.' }}</p>
+              </article>
+
+              <article class="card chart" data-testid="chart-slopegraph">
+                <p class="chart__title">Antes y después del periodo</p>
+                <p class="chart__sub">Promedio diario en la primera y la segunda mitad.</p>
+                @if (slopegraph(); as slope) {
+                  <svg viewBox="0 0 360 240" role="img"
+                       aria-label="Comparación del promedio diario entre la primera y la segunda mitad">
+                    <line x1="70" [attr.y1]="slope.arriba" x2="70" [attr.y2]="slope.abajo"
+                          stroke="var(--border)" stroke-width="1"/>
+                    <line x1="290" [attr.y1]="slope.arriba" x2="290" [attr.y2]="slope.abajo"
+                          stroke="var(--border)" stroke-width="1"/>
+                    <text x="70" y="24" text-anchor="middle" class="svg-label">Primera mitad</text>
+                    <text x="290" y="24" text-anchor="middle" class="svg-label">Segunda mitad</text>
+
+                    <line x1="70" [attr.y1]="slope.salasInicioY" x2="290" [attr.y2]="slope.salasFinY"
+                          stroke="var(--accent)" stroke-width="2.5"/>
+                    <line x1="70" [attr.y1]="slope.matchesInicioY" x2="290" [attr.y2]="slope.matchesFinY"
+                          stroke="#6366f1" stroke-width="2.5"/>
+
+                    <circle cx="70" [attr.cy]="slope.salasInicioY" r="4" fill="var(--accent)"/>
+                    <circle cx="290" [attr.cy]="slope.salasFinY" r="4" fill="var(--accent)"/>
+                    <circle cx="70" [attr.cy]="slope.matchesInicioY" r="4" fill="#6366f1"/>
+                    <circle cx="290" [attr.cy]="slope.matchesFinY" r="4" fill="#6366f1"/>
+
+                    <text x="62" [attr.y]="slope.salasInicioY - 8" text-anchor="end" class="svg-value">
+                      {{ slope.salasInicio | number:'1.1-1' }}
+                    </text>
+                    <text x="298" [attr.y]="slope.salasFinY - 8" text-anchor="start" class="svg-value">
+                      {{ slope.salasFin | number:'1.1-1' }}
+                    </text>
+                    <text x="62" [attr.y]="slope.matchesInicioY + 16" text-anchor="end" class="svg-value">
+                      {{ slope.matchesInicio | number:'1.1-1' }}
+                    </text>
+                    <text x="298" [attr.y]="slope.matchesFinY + 16" text-anchor="start" class="svg-value">
+                      {{ slope.matchesFin | number:'1.1-1' }}
+                    </text>
+                  </svg>
+                  <div class="legend">
+                    <span class="legend__item"><i class="legend__dot legend__dot--accent"></i>Salas/día</span>
+                    <span class="legend__item"><i class="legend__dot legend__dot--indigo"></i>Matches/día</span>
                   </div>
+                  <p class="chart-hint">{{ slope.resumen }}</p>
+                } @else {
+                  <p class="empty__hint">Se necesitan al menos dos días con actividad para comparar mitades.</p>
                 }
-              </div>
+              </article>
+            </section>
 
-              <!-- Enlace a tendencias detalladas -->
-              <div style="text-align:center; margin-top:32px;">
-                <a routerLink="/admin/dashboard/tendencias" class="btn btn--primary">
-                  Ver análisis detallado →
-                </a>
-              </div>
+            <article class="card chart" data-testid="chart-barras-semana">
+              <p class="chart__title">Promedio de salas por día de la semana</p>
+              <p class="chart__sub">Ayuda a decidir en qué días conviene impulsar la actividad.</p>
+              <svg [attr.viewBox]="'0 0 ' + chartWidth + ' ' + barChartHeight" role="img"
+                   aria-label="Promedio de salas creadas por día de la semana">
+                <line [attr.x1]="padding" [attr.y1]="barChartHeight - padding"
+                      [attr.x2]="chartWidth - padding" [attr.y2]="barChartHeight - padding"
+                      stroke="var(--border)" stroke-width="1"/>
+                @for (barra of barrasSemana(); track barra.dia) {
+                  <rect [attr.x]="barra.x" [attr.y]="barra.y"
+                        [attr.width]="barra.ancho" [attr.height]="barra.alto"
+                        rx="4" [attr.fill]="barra.promedio > 0 ? 'var(--accent)' : 'var(--surface2)'">
+                    <title>{{ barra.dia }}: {{ barra.promedio | number:'1.1-1' }} salas/día ({{ barra.dias }} días)</title>
+                  </rect>
+                  <text [attr.x]="barra.x + barra.ancho / 2" [attr.y]="barra.y - 6"
+                        text-anchor="middle" class="svg-value">{{ barra.promedio | number:'1.1-1' }}</text>
+                  <text [attr.x]="barra.x + barra.ancho / 2" [attr.y]="barChartHeight - padding + 16"
+                        text-anchor="middle" class="svg-label">{{ barra.dia }}</text>
+                }
+              </svg>
+            </article>
 
-            }
+            <p class="footnote">
+              Los datos se calculan con el historial diario de la plataforma. El reporte XLSX incluye
+              el resumen del periodo, la serie diaria y el desglose por día de la semana.
+            </p>
           }
         </div>
-      </div>
+      </main>
     </div>
   `,
   styles: [`
-    .sparkline {
-      width: 100%;
-      height: 20px;
-      margin-top: 8px;
+    .dash { flex: 1; padding: 28px 24px; }
+    .dash__inner { max-width: 1180px; margin: 0 auto; }
+    .dash__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+    .dash__head .section-sub { margin-bottom: 0; max-width: 720px; }
+    .export-msg { background: rgba(34, 197, 94, 0.12); border: 1px solid var(--success); color: var(--success); border-radius: var(--radius); padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
+    .export-error { background: rgba(239, 68, 68, 0.12); border: 1px solid var(--danger); color: var(--danger); border-radius: var(--radius); padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
+    .filters { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 24px; padding: 16px; }
+    .filters .form-group { flex: 1; min-width: 150px; }
+    .filters__resumen { margin-left: auto; font-size: 12px; color: var(--text-sub); padding-bottom: 10px; }
+    .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px; display: flex; flex-direction: column; gap: 2px; }
+    .kpi__value { font-family: var(--font-disp); font-size: 30px; line-height: 1.1; color: var(--accent); }
+    .kpi__label { font-size: 13px; color: var(--text); }
+    .kpi__detail { font-size: 12px; color: var(--text-sub); }
+    .sparkline { width: 100%; height: 22px; margin-top: 8px; }
+    .charts { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .chart { padding: 18px; margin-bottom: 0; }
+    .chart__title { font-weight: 600; font-size: 14px; margin-bottom: 2px; color: var(--text); }
+    .chart__sub { font-size: 12px; color: var(--text-sub); margin-bottom: 12px; }
+    .chart svg { width: 100%; height: auto; display: block; }
+    .svg-label { font-size: 10px; fill: var(--text-sub); }
+    .svg-value { font-size: 10px; font-weight: 600; fill: var(--text); }
+    .legend { display: flex; gap: 18px; justify-content: center; margin-top: 10px; }
+    .legend__item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-sub); }
+    .legend__dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .legend__dot--accent { background: var(--accent); }
+    .legend__dot--indigo { background: #6366f1; }
+    .chart-hint { font-size: 12px; color: var(--text-sub); text-align: center; margin-top: 10px; min-height: 18px; }
+    .empty { text-align: center; padding: 32px; margin-bottom: 24px; }
+    .empty__hint { font-size: 13px; color: var(--text-sub); margin-top: 6px; }
+    .footnote { font-size: 12px; color: var(--text-sub); text-align: center; margin-top: 8px; }
+    @media (max-width: 980px) {
+      .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .charts { grid-template-columns: 1fr; }
     }
-    
-    .chart-tooltip {
-      position: absolute;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 8px 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      pointer-events: none;
-      z-index: 100;
+    @media (max-width: 560px) {
+      .dash { padding: 20px 14px; }
+      .kpis { grid-template-columns: 1fr; }
+      .filters__resumen { margin-left: 0; }
     }
-  `]
+  `],
 })
 export class DashboardActividadComponent implements OnInit {
+  readonly chartWidth = 760;
+  readonly chartHeight = 300;
+  readonly barChartHeight = 240;
+  readonly padding = 40;
+
   historial = signal<MetricasDia[]>([]);
-  calificaciones = signal<CalificacionResponse[]>([]);
   cargando = signal(true);
+  errorCarga = signal(false);
+  exportando = signal(false);
+  msgExport = signal('');
+  errorExport = signal('');
+  detalleHover = signal('');
 
   fechaDesde = signal('');
   fechaHasta = signal('');
 
-  // Configuración del gráfico
-  readonly chartWidth = 800;
-  readonly chartHeight = 300;
-  readonly padding = 40;
-
-  // Tooltip
-  tooltipVisible = signal(false);
-  tooltipX = signal(0);
-  tooltipY = signal(0);
-  tooltipFecha = signal('');
-  tooltipValor = signal(0);
-  tooltipTipo = signal('');
+  private readonly opcionesLinea = computed(() => ({
+    ancho: this.chartWidth,
+    alto: this.chartHeight,
+    padding: this.padding,
+    maximo: this.maxValor(),
+  }));
 
   fechaMin = computed(() => {
     const lista = this.historial();
-    if (!lista.length) return '';
-    return this.toDateInput(lista[0].fecha);
+    return lista.length ? toDateInput(lista[0].fecha) : '';
   });
 
   fechaMax = computed(() => {
     const lista = this.historial();
-    if (!lista.length) return '';
-    return this.toDateInput(lista[lista.length - 1].fecha);
+    return lista.length ? toDateInput(lista[lista.length - 1].fecha) : '';
   });
 
   historialFiltrado = computed(() => {
@@ -296,76 +366,191 @@ export class DashboardActividadComponent implements OnInit {
       ? new Date(hastaRaw.getFullYear(), hastaRaw.getMonth(), hastaRaw.getDate() + 1)
       : null;
 
-    return lista.filter(c => {
-      const fecha = this.normalizarFecha(c.fecha);
+    return lista.filter((dia) => {
+      const fecha = normalizarFecha(dia.fecha);
       if (desde && fecha < desde) return false;
       if (hasta && fecha >= hasta) return false;
       return true;
     });
   });
 
-  metricasAgregadas = computed(() => {
+  hayDatos = computed(() => this.historialFiltrado().length > 0);
+
+  totales = computed(() => {
     const lista = this.historialFiltrado();
-    if (!lista.length) return { totalSalas: 0, salasActivas: 0, totalMatches: 0, promedioCalificacion: 0 };
+    const salas = lista.reduce((total, dia) => total + dia.totalSalas, 0);
+    const matches = lista.reduce((total, dia) => total + dia.totalMatches, 0);
+    const activasUltimoDia = lista.length ? lista[lista.length - 1].salasActivas : 0;
+    return {
+      salas,
+      matches,
+      activasUltimoDia,
+      conversion: salas ? (matches / salas) * 100 : 0,
+      promedioDiario: lista.length ? salas / lista.length : 0,
+      diasActivos: lista.filter((dia) => dia.totalSalas > 0 || dia.totalMatches > 0).length,
+    };
+  });
 
-    const totalSalas = lista.reduce((s, d) => s + d.totalSalas, 0);
-    const salasActivas = lista.reduce((s, d) => s + d.salasActivas, 0);
-    const totalMatches = lista.reduce((s, d) => s + d.totalMatches, 0);
-    const conPromedio = lista.filter(d => d.promedioCalificacion !== null && d.promedioCalificacion > 0);
-    const promedio = conPromedio.length
-      ? conPromedio.reduce((s, d) => s + (d.promedioCalificacion ?? 0), 0) / conPromedio.length
-      : 0;
+  conclusion = computed(() => {
+    const lista = this.historialFiltrado();
+    if (!lista.length) return 'Sin datos en el periodo seleccionado.';
 
-    return { totalSalas, salasActivas, totalMatches, promedioCalificacion: promedio };
+    const mitad = Math.floor(lista.length / 2);
+    const primera = lista.slice(0, mitad);
+    const segunda = lista.slice(lista.length - mitad);
+    const conversion = this.totales().conversion.toFixed(1);
+    const inicio = primera.length ? promedio(primera.map((dia) => dia.totalSalas)) : 0;
+    const fin = segunda.length ? promedio(segunda.map((dia) => dia.totalSalas)) : 0;
+    const cambio = inicio ? ((fin - inicio) / inicio) * 100 : 0;
+    const direccion = cambio >= 0 ? 'creció' : 'bajó';
+
+    return `${conversion}% de las salas terminaron en match; la actividad ${direccion} ${Math.abs(cambio).toFixed(1)}% en la segunda mitad del periodo.`;
   });
 
   maxValor = computed(() => {
     const lista = this.historialFiltrado();
     if (!lista.length) return 10;
-    const maxSalas = Math.max(...lista.map(d => d.totalSalas));
-    const maxMatches = Math.max(...lista.map(d => d.totalMatches));
-    return Math.max(maxSalas, maxMatches, 10);
+    return redondearMaximo(Math.max(...lista.map((dia) => Math.max(dia.totalSalas, dia.totalMatches)), 1));
   });
 
-  sparklineSalas = computed(() => this.generarSparkline(this.historialFiltrado().map(d => d.totalSalas)));
-  sparklineActivas = computed(() => this.generarSparkline(this.historialFiltrado().map(d => d.salasActivas)));
-  sparklineMatches = computed(() => this.generarSparkline(this.historialFiltrado().map(d => d.totalMatches)));
+  sparklineSalas = computed(() => generarSparkline(this.historialFiltrado().map((dia) => dia.totalSalas)));
+  sparklineMatches = computed(() => generarSparkline(this.historialFiltrado().map((dia) => dia.totalMatches)));
+  sparklineActivas = computed(() => generarSparkline(this.historialFiltrado().map((dia) => dia.salasActivas)));
+  sparklineConversion = computed(() =>
+    generarSparkline(this.historialFiltrado().map((dia) => (dia.totalSalas ? (dia.totalMatches / dia.totalSalas) * 100 : 0))),
+  );
 
-  lineaSalas = computed(() => this.generarLinea(this.historialFiltrado().map(d => d.totalSalas)));
-  lineaMatches = computed(() => this.generarLinea(this.historialFiltrado().map(d => d.totalMatches)));
+  lineaSalas = computed(() => generarLinea(this.historialFiltrado().map((dia) => dia.totalSalas), this.opcionesLinea()));
+  lineaMatches = computed(() => generarLinea(this.historialFiltrado().map((dia) => dia.totalMatches), this.opcionesLinea()));
 
-  puntosSalas = computed(() => this.generarPuntos(this.historialFiltrado().map(d => d.totalSalas)));
-  puntosMatches = computed(() => this.generarPuntos(this.historialFiltrado().map(d => d.totalMatches)));
+  puntosSalas = computed(() => this.puntosDe('totalSalas'));
+  puntosMatches = computed(() => this.puntosDe('totalMatches'));
 
-  etiquetasFechas = computed(() => {
+  lineasGuia = computed(() =>
+    [0.25, 0.5, 0.75, 1].map((factor) => ({
+      y: posicionY(this.maxValor() * factor, this.chartHeight, this.padding, this.maxValor()),
+      valor: this.maxValor() * factor,
+    })),
+  );
+
+  etiquetasX = computed(() => {
     const lista = this.historialFiltrado();
-    if (lista.length <= 7) {
-      return lista.map(d => this.formatearFechaCorta(d.fecha));
-    }
-    // Mostrar solo algunas fechas si hay muchas
-    const step = Math.ceil(lista.length / 7);
-    return lista.filter((_, i) => i % step === 0).map(d => this.formatearFechaCorta(d.fecha));
+    if (!lista.length) return [];
+    const paso = lista.length <= 7 ? 1 : Math.ceil(lista.length / 7);
+    const anchoUtil = this.chartWidth - 2 * this.padding;
+    const pasoX = anchoUtil / (lista.length - 1 || 1);
+
+    return lista
+      .map((dia, indice) => ({
+        x: this.padding + indice * pasoX,
+        label: formatearFechaCorta(dia.fecha),
+      }))
+      .filter((_, indice) => indice % paso === 0 || indice === lista.length - 1);
+  });
+
+  barrasSemana = computed(() => {
+    const lista = this.historialFiltrado();
+    const acumulado = new Map<string, { total: number; dias: number }>();
+    ORDEN_SEMANA.forEach((dia) => acumulado.set(dia, { total: 0, dias: 0 }));
+
+    lista.forEach((registro) => {
+      const clave = diaSemana(registro.fecha);
+      const actual = acumulado.get(clave);
+      if (actual) {
+        actual.total += registro.totalSalas;
+        actual.dias += 1;
+      }
+    });
+
+    const promedios = ORDEN_SEMANA.map((dia) => {
+      const dato = acumulado.get(dia) ?? { total: 0, dias: 0 };
+      return { dia, promedio: dato.dias ? dato.total / dato.dias : 0, total: dato.total, dias: dato.dias };
+    });
+    const maximo = redondearMaximo(Math.max(...promedios.map((barra) => barra.promedio), 1));
+    const anchoUtil = this.chartWidth - 2 * this.padding;
+    const anchoBarra = (anchoUtil / ORDEN_SEMANA.length) * 0.55;
+    const altoUtil = this.barChartHeight - 2 * this.padding;
+
+    return promedios.map((barra, indice) => {
+      const centro = this.padding + (indice + 0.5) * (anchoUtil / ORDEN_SEMANA.length);
+      const alto = (barra.promedio / maximo) * altoUtil;
+      return {
+        ...barra,
+        x: centro - anchoBarra / 2,
+        ancho: anchoBarra,
+        alto,
+        y: this.barChartHeight - this.padding - alto,
+      };
+    });
+  });
+
+  slopegraph = computed(() => {
+    const lista = this.historialFiltrado();
+    if (lista.length < 2) return null;
+
+    const mitad = Math.floor(lista.length / 2);
+    const primera = lista.slice(0, mitad);
+    const segunda = lista.slice(lista.length - mitad);
+    const salasInicio = promedio(primera.map((dia) => dia.totalSalas));
+    const salasFin = promedio(segunda.map((dia) => dia.totalSalas));
+    const matchesInicio = promedio(primera.map((dia) => dia.totalMatches));
+    const matchesFin = promedio(segunda.map((dia) => dia.totalMatches));
+    const maximo = redondearMaximo(Math.max(salasInicio, salasFin, matchesInicio, matchesFin, 1));
+    const alto = 240;
+    const padding = 40;
+    const delta = salasInicio ? ((salasFin - salasInicio) / salasInicio) * 100 : 0;
+    const direccion = delta >= 0 ? 'subió' : 'bajó';
+
+    return {
+      salasInicio,
+      salasFin,
+      matchesInicio,
+      matchesFin,
+      salasInicioY: posicionY(salasInicio, alto, padding, maximo),
+      salasFinY: posicionY(salasFin, alto, padding, maximo),
+      matchesInicioY: posicionY(matchesInicio, alto, padding, maximo),
+      matchesFinY: posicionY(matchesFin, alto, padding, maximo),
+      arriba: padding,
+      abajo: alto - padding,
+      resumen: `Las salas/día ${direccion} ${Math.abs(delta).toFixed(1)}% entre mitades.`,
+    };
   });
 
   constructor(
     private metricasSvc: MetricasService,
-    private retroSvc: RetroalimentacionService,
-    private auth: AuthService
+    private reporteSvc: ReporteXlsxService,
+    private auth: AuthService,
   ) {}
 
   ngOnInit(): void {
     this.metricasSvc.getHistorial().subscribe({
-      next: (data) => {
-        this.historial.set(data);
+      next: (datos) => {
+        this.historial.set(datos);
         this.cargando.set(false);
       },
-      error: () => this.cargando.set(false)
+      error: () => {
+        this.errorCarga.set(true);
+        this.cargando.set(false);
+      },
     });
+  }
 
-    this.retroSvc.getAll().subscribe({
-      next: (data) => this.calificaciones.set(data),
-      error: () => {}
-    });
+  aplicarPeriodoRapido(periodo: string): void {
+    if (!periodo) return;
+    const lista = this.historial();
+    if (!lista.length) return;
+
+    if (periodo === 'all') {
+      this.limpiarFiltro();
+      return;
+    }
+
+    const dias = Number(periodo);
+    const ultima = normalizarFecha(lista[lista.length - 1].fecha);
+    const desde = new Date(ultima);
+    desde.setUTCDate(desde.getUTCDate() - dias + 1);
+    this.fechaDesde.set(toDateInput(desde));
+    this.fechaHasta.set(toDateInput(ultima));
   }
 
   limpiarFiltro(): void {
@@ -373,105 +558,128 @@ export class DashboardActividadComponent implements OnInit {
     this.fechaHasta.set('');
   }
 
+  mostrarDetalle(indice: number): void {
+    this.detalleHover.set(this.detalleDe(indice));
+  }
+
+  limpiarDetalle(): void {
+    this.detalleHover.set('');
+  }
+
+  detalleDe(indice: number): string {
+    const dia = this.historialFiltrado()[indice];
+    if (!dia) return '';
+    return `${formatearFecha(dia.fecha)} · ${dia.totalSalas} salas · ${dia.totalMatches} matches`;
+  }
+
   logout(): void {
     this.auth.logout();
   }
 
-  getColorPromedio(): string {
-    const promedio = this.metricasAgregadas().promedioCalificacion;
-    if (promedio >= 8) return 'var(--success)';
-    if (promedio >= 6) return '#f59e0b';
-    return 'var(--danger)';
-  }
+  async exportar(): Promise<void> {
+    if (!this.hayDatos() || this.exportando()) return;
 
-  getStrokeDashArray(): string {
-    const promedio = this.metricasAgregadas().promedioCalificacion;
-    const porcentaje = (promedio / 10) * 314.16; // 2πr = 2*π*50 ≈ 314.16
-    return `${porcentaje}, 314.16`;
-  }
+    this.exportando.set(true);
+    this.msgExport.set('');
+    this.errorExport.set('');
 
-  getConteoCalificacion(valor: number): number {
-    return this.calificaciones().filter(c => c.valor === valor).length;
-  }
-
-  onChartMouseMove(event: MouseEvent): void {
-    // Este método se puede usar para interactividad adicional si es necesario
-  }
-
-  mostrarTooltip(punto: { x: number; y: number; valor: number; fecha: string }, tipo: string): void {
-    this.tooltipX.set(punto.x);
-    this.tooltipY.set(punto.y - 60);
-    this.tooltipFecha.set(this.formatearFecha(punto.fecha));
-    this.tooltipValor.set(punto.valor);
-    this.tooltipTipo.set(tipo);
-    this.tooltipVisible.set(true);
-  }
-
-  private generarSparkline(valores: number[]): string {
-    if (!valores.length) return '';
-    const max = Math.max(...valores, 1);
-    const step = 100 / (valores.length - 1 || 1);
-    return valores.map((v, i) => `${i * step},${20 - (v / max) * 18}`).join(' ');
-  }
-
-  private generarLinea(valores: number[]): string {
-    if (!valores.length) return '';
-    const chartArea = {
-      x: this.padding,
-      y: this.padding,
-      width: this.chartWidth - 2 * this.padding,
-      height: this.chartHeight - 2 * this.padding
-    };
-    const max = this.maxValor();
-    const step = chartArea.width / (valores.length - 1 || 1);
-    return valores.map((v, i) => {
-      const x = chartArea.x + i * step;
-      const y = chartArea.y + chartArea.height - (v / max) * chartArea.height;
-      return `${x},${y}`;
-    }).join(' ');
-  }
-
-  private generarPuntos(valores: number[]): Array<{ x: number; y: number; valor: number; fecha: string }> {
     const lista = this.historialFiltrado();
-    if (!valores.length) return [];
-    const chartArea = {
-      x: this.padding,
-      y: this.padding,
-      width: this.chartWidth - 2 * this.padding,
-      height: this.chartHeight - 2 * this.padding
-    };
-    const max = this.maxValor();
-    const step = chartArea.width / (valores.length - 1 || 1);
-    return valores.map((v, i) => ({
-      x: chartArea.x + i * step,
-      y: chartArea.y + chartArea.height - (v / max) * chartArea.height,
-      valor: v,
-      fecha: lista[i]?.fecha || ''
-    }));
+    const totales = this.totales();
+    const periodo = this.periodoTexto();
+
+    try {
+      await this.reporteSvc.descargar({
+        nombreArchivo: 'cinematch-dashboard-actividad',
+        hojas: [
+          {
+            nombre: 'Resumen',
+            titulo: 'CineMatch · Actividad y conversión',
+            subtitulo: this.conclusion(),
+            periodo,
+            columnas: [
+              { titulo: 'Indicador', ancho: 30, tipo: 'texto' },
+              { titulo: 'Valor', ancho: 16, tipo: 'decimal' },
+              { titulo: 'Detalle', ancho: 44, tipo: 'texto' },
+            ],
+            filas: [
+              ['Salas creadas', totales.salas, `${totales.diasActivos} días con actividad`],
+              ['Matches generados', totales.matches, `${totales.conversion.toFixed(1)}% de conversión`],
+              ['Conversión a match (%)', Number(totales.conversion.toFixed(1)), 'Matches / salas del periodo'],
+              ['Promedio diario de salas', Number(totales.promedioDiario.toFixed(1)), 'Salas creadas por día'],
+              ['Salas activas (último día)', totales.activasUltimoDia, 'Último día del periodo'],
+            ],
+          },
+          {
+            nombre: 'Serie diaria',
+            titulo: 'Serie diaria de actividad',
+            subtitulo: 'Salas y matches por fecha, con la conversión diaria.',
+            periodo,
+            columnas: [
+              { titulo: 'Fecha', ancho: 14, tipo: 'texto' },
+              { titulo: 'Salas', ancho: 10, tipo: 'entero' },
+              { titulo: 'Activas', ancho: 10, tipo: 'entero' },
+              { titulo: 'Matches', ancho: 10, tipo: 'entero' },
+              { titulo: 'Conversión (%)', ancho: 14, tipo: 'porcentaje' },
+              { titulo: 'Promedio calificación', ancho: 18, tipo: 'decimal' },
+            ],
+            filas: lista.map((dia) => [
+              formatearFecha(dia.fecha),
+              dia.totalSalas,
+              dia.salasActivas,
+              dia.totalMatches,
+              Number((dia.totalSalas ? (dia.totalMatches / dia.totalSalas) * 100 : 0).toFixed(1)),
+              Number((dia.promedioCalificacion ?? 0).toFixed(1)),
+            ]),
+            totales: [
+              'Total',
+              totales.salas,
+              lista.reduce((total, dia) => total + dia.salasActivas, 0),
+              totales.matches,
+              Number(totales.conversion.toFixed(1)),
+              '',
+            ],
+          },
+          {
+            nombre: 'Día de semana',
+            titulo: 'Promedio de salas por día de la semana',
+            subtitulo: 'Permite identificar los días con mayor actividad.',
+            periodo,
+            columnas: [
+              { titulo: 'Día', ancho: 12, tipo: 'texto' },
+              { titulo: 'Promedio de salas', ancho: 20, tipo: 'decimal' },
+              { titulo: 'Total de salas', ancho: 16, tipo: 'entero' },
+              { titulo: 'Días registrados', ancho: 16, tipo: 'entero' },
+            ],
+            filas: this.barrasSemana().map((barra) => [
+              barra.dia,
+              Number(barra.promedio.toFixed(1)),
+              barra.total,
+              barra.dias,
+            ]),
+          },
+        ],
+      });
+      this.msgExport.set('Reporte XLSX generado con los datos del periodo.');
+    } catch {
+      this.errorExport.set('No se pudo generar el reporte. Intenta de nuevo.');
+    } finally {
+      this.exportando.set(false);
+    }
   }
 
-  private formatearFecha(fechaStr: string): string {
-    const fecha = this.normalizarFecha(fechaStr);
-    return fecha.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+  private puntosDe(campo: 'totalSalas' | 'totalMatches'): PuntoGrafica[] {
+    const lista = this.historialFiltrado();
+    return generarPuntos(
+      lista.map((dia) => dia[campo]),
+      this.opcionesLinea(),
+    ).map((punto, indice) => ({ ...punto, fecha: lista[indice]?.fecha ?? '' }));
   }
 
-  private formatearFechaCorta(fechaStr: string): string {
-    const fecha = this.normalizarFecha(fechaStr);
-    return fecha.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
-  }
-
-  private toDateInput(fecha: string | Date): string {
-    const d = typeof fecha === 'string' ? this.normalizarFecha(fecha) : fecha;
-    const yyyy = d.getUTCFullYear();
-    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const dd = String(d.getUTCDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  }
-
-  private normalizarFecha(fechaStr: string): Date {
-    const normalizada = fechaStr.includes('Z') || fechaStr.includes('+')
-      ? fechaStr
-      : fechaStr + 'Z';
-    return new Date(normalizada);
+  private periodoTexto(): string {
+    const lista = this.historialFiltrado();
+    if (!lista.length) return 'Sin datos';
+    const inicio = this.fechaDesde() || toDateInput(lista[0].fecha);
+    const fin = this.fechaHasta() || toDateInput(lista[lista.length - 1].fecha);
+    return `${inicio} a ${fin}`;
   }
 }
