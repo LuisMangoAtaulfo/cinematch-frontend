@@ -161,6 +161,16 @@ if [ "${HEADLESS}" = true ]; then
     CMD+=" --variable HEADLESS:true"
 fi
 
+if [ -n "${TAG}" ]; then
+    CMD+=" --include ${TAG}"
+fi
+
+if [ "${DRY_RUN}" = true ]; then
+    CMD+=" --dryrun"
+fi
+
+# La ruta de ejecución va al final: Robot interpreta como fuente de datos
+# cualquier argumento posicional que aparezca después.
 if [ -n "${SUITE}" ]; then
     SUITE_FILE="${ROBOT_DIR}/test_${SUITE}.robot"
     if [ ! -f "${SUITE_FILE}" ]; then
@@ -172,14 +182,6 @@ if [ -n "${SUITE}" ]; then
     CMD+=" ${SUITE_FILE}"
 else
     CMD+=" ${ROBOT_DIR}"
-fi
-
-if [ -n "${TAG}" ]; then
-    CMD+=" --include ${TAG}"
-fi
-
-if [ "${DRY_RUN}" = true ]; then
-    CMD+=" --dryrun"
 fi
 
 echo "Ejecutando: ${CMD}"
