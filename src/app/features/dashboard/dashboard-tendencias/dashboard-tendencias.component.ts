@@ -13,7 +13,6 @@ import {
   formatearFechaCorta,
   generarLinea,
   generarPuntos,
-  generarSparkline,
   normalizarFecha,
   posicionY,
   promedio,
@@ -119,36 +118,24 @@ interface CeldaCalor {
                 <p class="kpi__value">{{ resumen().promedio | number:'1.1-1' }}<span class="kpi__unidad">/10</span></p>
                 <p class="kpi__label">Promedio de calificación</p>
                 <p class="kpi__detail">{{ resumen().total }} calificaciones</p>
-                <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
-                  <polyline [attr.points]="sparklinePromedio()" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
-                </svg>
               </article>
 
               <article class="kpi" data-testid="kpi-total">
                 <p class="kpi__value">{{ resumen().total | number:'1.0-0' }}</p>
                 <p class="kpi__label">Calificaciones recibidas</p>
                 <p class="kpi__detail">{{ serieDiaria().length }} días con datos</p>
-                <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
-                  <polyline [attr.points]="sparklineTotal()" fill="none" stroke="#6366f1" stroke-width="1.5"/>
-                </svg>
               </article>
 
               <article class="kpi" data-testid="kpi-satisfaccion">
                 <p class="kpi__value">{{ resumen().satisfaccion | number:'1.0-1' }}%</p>
                 <p class="kpi__label">Satisfacción (nota ≥ 8)</p>
                 <p class="kpi__detail">{{ resumen().satisfechos }} calificaciones altas</p>
-                <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
-                  <polyline [attr.points]="sparklineSatisfaccion()" fill="none" stroke="var(--success)" stroke-width="1.5"/>
-                </svg>
               </article>
 
               <article class="kpi" data-testid="kpi-riesgo">
                 <p class="kpi__value">{{ resumen().riesgo | number:'1.0-1' }}%</p>
                 <p class="kpi__label">Riesgo (nota ≤ 5)</p>
                 <p class="kpi__detail">{{ resumen().riesgoTotal }} calificaciones bajas</p>
-                <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
-                  <polyline [attr.points]="sparklineRiesgo()" fill="none" stroke="var(--danger)" stroke-width="1.5"/>
-                </svg>
               </article>
             </section>
 
@@ -292,7 +279,6 @@ interface CeldaCalor {
     .kpi__unidad { font-size: 14px; color: var(--text-sub); margin-left: 2px; }
     .kpi__label { font-size: 13px; color: var(--text); }
     .kpi__detail { font-size: 12px; color: var(--text-sub); }
-    .sparkline { width: 100%; height: 22px; margin-top: 8px; }
     .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
     .chart { padding: 18px; margin-bottom: 0; }
     .chart__title { font-weight: 600; font-size: 14px; margin-bottom: 2px; color: var(--text); }
@@ -412,11 +398,6 @@ export class DashboardTendenciasComponent implements OnInit {
       riesgo: total ? (riesgoTotal / total) * 100 : 0,
     };
   });
-
-  sparklinePromedio = computed(() => generarSparkline(this.serieDiaria().map((dia) => dia.promedio)));
-  sparklineTotal = computed(() => generarSparkline(this.serieDiaria().map((dia) => dia.total)));
-  sparklineSatisfaccion = computed(() => generarSparkline(this.serieDiaria().map((dia) => dia.satisfaccion)));
-  sparklineRiesgo = computed(() => generarSparkline(this.serieDiaria().map((dia) => dia.riesgo)));
 
   periodoAnterior = computed(() => {
     const actual = this.calificacionesFiltradas();

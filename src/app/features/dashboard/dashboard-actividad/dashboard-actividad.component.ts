@@ -13,7 +13,6 @@ import {
   formatearFechaCorta,
   generarLinea,
   generarPuntos,
-  generarSparkline,
   normalizarFecha,
   posicionY,
   promedio,
@@ -116,36 +115,24 @@ import {
                 <p class="kpi__value">{{ totales().salas | number:'1.0-0' }}</p>
                 <p class="kpi__label">Salas creadas</p>
                 <p class="kpi__detail">{{ totales().diasActivos }} días con actividad</p>
-                <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
-                  <polyline [attr.points]="sparklineSalas()" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
-                </svg>
               </article>
 
               <article class="kpi metric-card" data-testid="kpi-matches">
                 <p class="kpi__value">{{ totales().matches | number:'1.0-0' }}</p>
                 <p class="kpi__label">Matches generados</p>
                 <p class="kpi__detail">{{ totales().conversion | number:'1.1-1' }}% de las salas</p>
-                <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
-                  <polyline [attr.points]="sparklineMatches()" fill="none" stroke="#6366f1" stroke-width="1.5"/>
-                </svg>
               </article>
 
               <article class="kpi metric-card" data-testid="kpi-conversion">
                 <p class="kpi__value">{{ totales().conversion | number:'1.1-1' }}%</p>
                 <p class="kpi__label">Conversión a match</p>
                 <p class="kpi__detail">{{ totales().matches }} matches / {{ totales().salas }} salas</p>
-                <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
-                  <polyline [attr.points]="sparklineConversion()" fill="none" stroke="var(--success)" stroke-width="1.5"/>
-                </svg>
               </article>
 
               <article class="kpi metric-card" data-testid="kpi-activas">
                 <p class="kpi__value">{{ totales().promedioDiario | number:'1.1-1' }}</p>
                 <p class="kpi__label">Promedio diario de salas</p>
                 <p class="kpi__detail">{{ totales().activasUltimoDia }} activas el último día</p>
-                <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
-                  <polyline [attr.points]="sparklineActivas()" fill="none" stroke="#f59e0b" stroke-width="1.5"/>
-                </svg>
               </article>
             </section>
 
@@ -286,7 +273,6 @@ import {
     .kpi__value { font-family: var(--font-disp); font-size: 30px; line-height: 1.1; color: var(--accent); }
     .kpi__label { font-size: 13px; color: var(--text); }
     .kpi__detail { font-size: 12px; color: var(--text-sub); }
-    .sparkline { width: 100%; height: 22px; margin-top: 8px; }
     .charts { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; margin-bottom: 24px; }
     .chart { padding: 18px; margin-bottom: 0; }
     .chart__title { font-weight: 600; font-size: 14px; margin-bottom: 2px; color: var(--text); }
@@ -458,13 +444,6 @@ export class DashboardActividadComponent implements OnInit {
     if (!lista.length) return 10;
     return redondearMaximo(Math.max(...lista.map((dia) => Math.max(dia.totalSalas, dia.totalMatches)), 1));
   });
-
-  sparklineSalas = computed(() => generarSparkline(this.historialFiltrado().map((dia) => dia.totalSalas)));
-  sparklineMatches = computed(() => generarSparkline(this.historialFiltrado().map((dia) => dia.totalMatches)));
-  sparklineActivas = computed(() => generarSparkline(this.historialFiltrado().map((dia) => dia.salasActivas)));
-  sparklineConversion = computed(() =>
-    generarSparkline(this.historialFiltrado().map((dia) => (dia.totalSalas ? (dia.totalMatches / dia.totalSalas) * 100 : 0))),
-  );
 
   lineaSalas = computed(() => generarLinea(this.historialFiltrado().map((dia) => dia.totalSalas), this.opcionesLinea()));
   lineaMatches = computed(() => generarLinea(this.historialFiltrado().map((dia) => dia.totalMatches), this.opcionesLinea()));

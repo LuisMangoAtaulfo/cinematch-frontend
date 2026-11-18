@@ -71,15 +71,6 @@ export function promedio(valores: number[]): number {
   return valores.reduce((total, valor) => total + valor, 0) / valores.length;
 }
 
-export function generarSparkline(valores: number[], ancho = 100, alto = 20): string {
-  if (!valores.length) return '';
-  const maximo = Math.max(...valores, 1);
-  const paso = ancho / (valores.length - 1 || 1);
-  return valores
-    .map((valor, indice) => `${indice * paso},${alto - (valor / maximo) * (alto - 2)}`)
-    .join(' ');
-}
-
 export function generarLinea(valores: number[], opciones: OpcionesLinea): string {
   return generarPuntos(valores, opciones)
     .map((punto) => `${punto.x},${punto.y}`)
