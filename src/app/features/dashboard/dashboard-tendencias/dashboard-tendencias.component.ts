@@ -1,16 +1,39 @@
-import { Component, OnInit, signal, computed } from '@angular/core';
+import { Component, OnInit, computed, signal } from '@angular/core';
 import { CommonModule, DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { MetricasService, MetricasDia, RetroalimentacionService } from '../../../core/services/admin.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { RetroalimentacionService } from '../../../core/services/admin.service';
+import { ReporteXlsxService } from '../../../core/services/reporte-xlsx.service';
+import type { IndicadorReporte } from '../../../core/services/reporte-xlsx.service';
 import { CalificacionResponse } from '../../../core/models';
+import {
+  ORDEN_SEMANA,
+  diaSemana,
+  formatearFecha,
+  formatearFechaCorta,
+  generarLinea,
+  generarPuntos,
+  generarSparkline,
+  normalizarFecha,
+  posicionY,
+  promedio,
+  toDateInput,
+} from '../../../core/utils/dashboard.utils';
 
-interface PuntoDatos {
-  x: number;
-  y: number;
-  valor: number;
+interface SerieDia {
   fecha: string;
-  fechaLabel: string;
+  etiqueta: string;
+  promedio: number;
+  total: number;
+  satisfaccion: number;
+  riesgo: number;
+}
+
+interface CeldaCalor {
+  dia: string;
+  rango: string;
+  total: number;
+  intensidad: number;
 }
 
 @Component({
@@ -22,7 +45,7 @@ interface PuntoDatos {
       <nav class="navbar">
         <span class="navbar__logo">CineMatch</span>
         <div class="navbar__actions">
-          <a routerLink="/admin/dashboard" class="btn btn--ghost btn--sm">Panel</a>
+          <a routerLink="/admin/dashboard" class="btn btn--ghost btn--sm">Actividad</a>
           <a routerLink="/admin/metricas" class="btn btn--ghost btn--sm">Métricas</a>
           <a routerLink="/admin/plataformas" class="btn btn--ghost btn--sm">Plataformas</a>
           <a routerLink="/admin/retroalimentacion" class="btn btn--ghost btn--sm">Retroalimentación</a>
@@ -30,486 +53,647 @@ interface PuntoDatos {
         </div>
       </nav>
 
-      <div style="flex:1; padding:28px 24px;">
-        <div class="container container--wide" style="margin:0 auto;">
-          <p class="section-title">Análisis de Tendencias</p>
-          <p class="section-sub">Evolución detallada de la actividad de la plataforma</p>
+      <main class="dash">
+        <div class="dash__inner">
+          <header class="dash__head">
+            <div>
+              <p class="section-title">Satisfacción y calidad</p>
+              <p class="section-sub">{{ conclusion() }}</p>
+            </div>
+            <button
+              id="btn-exportar-xlsx"
+              data-testid="btn-exportar-xlsx"
+              class="btn btn--primary"
+              [disabled]="!hayDatos() || exportando()"
+              [attr.title]="hayDatos() ? 'Descarga el reporte con los datos del periodo' : 'No hay datos para exportar'"
+              (click)="exportar()">
+              {{ exportando() ? 'Generando…' : 'Exportar XLSX' }}
+            </button>
+          </header>
+
+          @if (msgExport()) {
+            <p id="msg-export-ok" data-testid="msg-export-ok" class="export-msg" role="status">
+              {{ msgExport() }}
+            </p>
+          }
+          @if (errorExport()) {
+            <p class="export-error" role="alert">{{ errorExport() }}</p>
+          }
+
+          <section class="card filters" aria-label="Filtros del dashboard">
+            <div class="form-group">
+              <label for="desde">Desde</label>
+              <input id="desde" type="date"
+                     [value]="fechaDesde()"
+                     (change)="fechaDesde.set($any($event.target).value)"
+                     [min]="fechaMin()"
+                     [max]="fechaHasta() || fechaMax()">
+            </div>
+            <div class="form-group">
+              <label for="hasta">Hasta</label>
+              <input id="hasta" type="date"
+                     [value]="fechaHasta()"
+                     (change)="fechaHasta.set($any($event.target).value)"
+                     [min]="fechaDesde() || fechaMin()"
+                     [max]="fechaMax()">
+            </div>
+            @if (fechaDesde() || fechaHasta()) {
+              <button class="btn btn--ghost" (click)="limpiarFiltro()">Limpiar</button>
+            }
+            <p class="filters__resumen">{{ calificacionesFiltradas().length }} calificaciones en el periodo</p>
+          </section>
 
           @if (cargando()) {
-            <p style="color:var(--text-sub);">Cargando historial...</p>
-          } @else if (historial().length === 0) {
-            <div class="card" style="text-align:center; padding:32px;">
-              <p style="color:var(--text-sub);">No hay datos históricos disponibles.</p>
+            <div class="card empty"><p>Cargando calificaciones…</p></div>
+          } @else if (errorCarga()) {
+            <div class="card empty" role="alert">
+              <p>No se pudieron cargar las calificaciones. Revisa la conexión con el backend.</p>
+            </div>
+          } @else if (!hayDatos()) {
+            <div id="dashboard-vacio" data-testid="dashboard-vacio" class="card empty">
+              <p>No hay calificaciones en el periodo seleccionado.</p>
+              <p class="empty__hint">Ajusta el rango de fechas o limpia el filtro.</p>
             </div>
           } @else {
+            <section class="kpis" aria-label="Indicadores de satisfacción">
+              <article class="kpi" data-testid="kpi-promedio">
+                <p class="kpi__value">{{ resumen().promedio | number:'1.1-1' }}<span class="kpi__unidad">/10</span></p>
+                <p class="kpi__label">Promedio de calificación</p>
+                <p class="kpi__detail">{{ resumen().total }} calificaciones</p>
+                <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
+                  <polyline [attr.points]="sparklinePromedio()" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+                </svg>
+              </article>
 
-            <!-- Filtro de rango -->
-            <div style="display:flex; gap:12px; align-items:flex-end; margin-bottom:28px; flex-wrap:wrap;">
-              <div class="form-group" style="flex:1; min-width:140px;">
-                <label>Periodo rápido</label>
-                <select (change)="aplicarPeriodoRapido($any($event.target).value)">
-                  <option value="">Seleccionar...</option>
-                  <option value="7">Últimos 7 días</option>
-                  <option value="14">Últimos 14 días</option>
-                  <option value="30">Últimos 30 días</option>
-                  <option value="all">Todo el historial</option>
-                </select>
-              </div>
-              <div class="form-group" style="flex:1; min-width:140px;">
-                <label>Desde</label>
-                <input type="date" [value]="fechaDesde()"
-                       (change)="fechaDesde.set($any($event.target).value)"
-                       [min]="fechaMin()" [max]="fechaHasta() || fechaMax()">
-              </div>
-              <div class="form-group" style="flex:1; min-width:140px;">
-                <label>Hasta</label>
-                <input type="date" [value]="fechaHasta()"
-                       (change)="fechaHasta.set($any($event.target).value)"
-                       [min]="fechaDesde() || fechaMin()" [max]="fechaMax()">
-              </div>
-              @if (fechaDesde() || fechaHasta()) {
-                <button class="btn btn--ghost" style="height:44px;" (click)="limpiarFiltro()">
-                  Limpiar
-                </button>
-              }
-            </div>
+              <article class="kpi" data-testid="kpi-total">
+                <p class="kpi__value">{{ resumen().total | number:'1.0-0' }}</p>
+                <p class="kpi__label">Calificaciones recibidas</p>
+                <p class="kpi__detail">{{ serieDiaria().length }} días con datos</p>
+                <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
+                  <polyline [attr.points]="sparklineTotal()" fill="none" stroke="#6366f1" stroke-width="1.5"/>
+                </svg>
+              </article>
 
-            @if (!historialFiltrado().length) {
-              <div class="card" style="text-align:center; padding:32px;">
-                <p style="color:var(--text-sub);">No hay datos en el rango seleccionado.</p>
-              </div>
-            } @else {
+              <article class="kpi" data-testid="kpi-satisfaccion">
+                <p class="kpi__value">{{ resumen().satisfaccion | number:'1.0-1' }}%</p>
+                <p class="kpi__label">Satisfacción (nota ≥ 8)</p>
+                <p class="kpi__detail">{{ resumen().satisfechos }} calificaciones altas</p>
+                <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
+                  <polyline [attr.points]="sparklineSatisfaccion()" fill="none" stroke="var(--success)" stroke-width="1.5"/>
+                </svg>
+              </article>
 
-              <!-- Resumen de periodo -->
-              <div class="grid-3" style="margin-bottom:32px;">
-                <div class="metric-card">
-                  <p class="metric-value">{{ resumenPeriodo().promedioSalas | number:'1.1-1' }}</p>
-                  <p class="metric-label">Promedio diario de salas</p>
-                </div>
-                <div class="metric-card">
-                  <p class="metric-value">{{ resumenPeriodo().promedioMatches | number:'1.1-1' }}</p>
-                  <p class="metric-label">Promedio diario de matches</p>
-                </div>
-                <div class="metric-card">
-                  <p class="metric-value">{{ resumenPeriodo().diasActivos }}</p>
-                  <p class="metric-label">Días con actividad</p>
-                </div>
-              </div>
+              <article class="kpi" data-testid="kpi-riesgo">
+                <p class="kpi__value">{{ resumen().riesgo | number:'1.0-1' }}%</p>
+                <p class="kpi__label">Riesgo (nota ≤ 5)</p>
+                <p class="kpi__detail">{{ resumen().riesgoTotal }} calificaciones bajas</p>
+                <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
+                  <polyline [attr.points]="sparklineRiesgo()" fill="none" stroke="var(--danger)" stroke-width="1.5"/>
+                </svg>
+              </article>
+            </section>
 
-              <!-- Gráfica de área: salas y matches -->
-              <div class="card" style="margin-bottom:32px; position:relative;">
-                <p style="font-weight:500; margin-bottom:4px;">Salas y matches por día</p>
-                <p style="font-size:12px; color:var(--text-sub); margin-bottom:16px;">
-                  Comparación diaria de creación de salas vs matches generados
-                </p>
-                <svg [attr.viewBox]="'0 0 ' + chartWidth + ' ' + chartHeight"
-                     style="width:100%; height:320px;">
-                  <!-- Grid horizontal -->
-                  @for (i of gridLines; track i) {
-                    <line [attr.x1]="padding" 
-                          [attr.y1]="chartHeight - padding - chartInnerH() * i"
-                          [attr.x2]="chartWidth - padding"
-                          [attr.y2]="chartHeight - padding - chartInnerH() * i"
-                          stroke="var(--border)" stroke-width="0.5" stroke-dasharray="4,4"/>
-                    <text [attr.x]="padding - 8"
-                          [attr.y]="chartHeight - padding - chartInnerH() * i + 4"
-                          text-anchor="end" style="font-size:10px; fill:var(--text-sub);">
-                      {{ maxArea() * i | number:'1.0-0' }}
-                    </text>
+            <section class="charts">
+              <article class="card chart" data-testid="chart-distribucion">
+                <p class="chart__title">Distribución de calificaciones</p>
+                <p class="chart__sub">Cuántas personas otorgaron cada nota (1 a 10).</p>
+                <svg [attr.viewBox]="'0 0 ' + chartWidth + ' ' + chartHeight" role="img"
+                     aria-label="Distribución de calificaciones por nota">
+                  <line [attr.x1]="padding" [attr.y1]="chartHeight - padding"
+                        [attr.x2]="chartWidth - padding" [attr.y2]="chartHeight - padding"
+                        stroke="var(--border)" stroke-width="1"/>
+                  @for (barra of distribucion(); track barra.valor) {
+                    <rect [attr.x]="barra.x" [attr.y]="barra.y"
+                          [attr.width]="barra.ancho" [attr.height]="barra.alto"
+                          rx="4" [attr.fill]="barra.color">
+                      <title>Nota {{ barra.valor }}: {{ barra.total }} calificaciones ({{ barra.porcentaje | number:'1.1-1' }}%)</title>
+                    </rect>
+                    <text [attr.x]="barra.x + barra.ancho / 2" [attr.y]="barra.y - 6"
+                          text-anchor="middle" class="svg-value">{{ barra.total }}</text>
+                    <text [attr.x]="barra.x + barra.ancho / 2" [attr.y]="chartHeight - padding + 16"
+                          text-anchor="middle" class="svg-label">{{ barra.valor }}</text>
                   }
-                  <!-- Ejes -->
+                </svg>
+                <p class="chart-hint">Verde: 8–10 · Ámbar: 6–7 · Rojo: 1–5</p>
+              </article>
+
+              <article class="card chart" data-testid="chart-promedio-diario">
+                <p class="chart__title">Promedio diario y meta</p>
+                <p class="chart__sub">La línea punteada marca la meta de 7 puntos.</p>
+                <svg [attr.viewBox]="'0 0 ' + chartWidth + ' ' + chartHeight" role="img"
+                     aria-label="Promedio diario de calificación con meta de siete puntos">
+                  @for (guia of guiasPromedio(); track guia.valor) {
+                    <line [attr.x1]="padding" [attr.y1]="guia.y"
+                          [attr.x2]="chartWidth - padding" [attr.y2]="guia.y"
+                          stroke="var(--border)" stroke-width="0.5" stroke-dasharray="4,4"/>
+                    <text [attr.x]="padding - 8" [attr.y]="guia.y + 4"
+                          text-anchor="end" class="svg-label">{{ guia.valor }}</text>
+                  }
                   <line [attr.x1]="padding" [attr.y1]="padding"
                         [attr.x2]="padding" [attr.y2]="chartHeight - padding"
                         stroke="var(--border)" stroke-width="1"/>
                   <line [attr.x1]="padding" [attr.y1]="chartHeight - padding"
                         [attr.x2]="chartWidth - padding" [attr.y2]="chartHeight - padding"
                         stroke="var(--border)" stroke-width="1"/>
+                  <line [attr.x1]="padding" [attr.y1]="metaY()"
+                        [attr.x2]="chartWidth - padding" [attr.y2]="metaY()"
+                        stroke="var(--success)" stroke-width="1.5" stroke-dasharray="6,4"/>
+                  <text [attr.x]="chartWidth - padding" [attr.y]="metaY() - 6"
+                        text-anchor="end" class="svg-value svg-value--meta">Meta 7</text>
 
-                  <!-- Área de salas -->
-                  <polygon [attr.points]="areaSalas()" fill="var(--accent)" opacity="0.15"/>
-                  <polyline [attr.points]="lineaSalas()" fill="none" 
-                            stroke="var(--accent)" stroke-width="2"/>
-
-                  <!-- Área de matches -->
-                  <polygon [attr.points]="areaMatches()" fill="#6366f1" opacity="0.15"/>
-                  <polyline [attr.points]="lineaMatches()" fill="none"
-                            stroke="#6366f1" stroke-width="2"/>
-
-                  <!-- Puntos interactivos -->
-                  @for (p of puntosSalas(); track $index) {
-                    <circle [attr.cx]="p.x" [attr.cy]="p.y" r="4"
-                            fill="var(--accent)" stroke="white" stroke-width="1.5"
-                            style="cursor:pointer;"
-                            (mouseenter)="mostrarTooltip(p, 'Salas creadas')"
-                            (mouseleave)="ocultarTooltip()"/>
+                  <polyline [attr.points]="lineaPromedio()" fill="none" stroke="var(--accent)" stroke-width="2"/>
+                  @for (punto of puntosPromedio(); track $index) {
+                    <circle [attr.cx]="punto.x" [attr.cy]="punto.y" r="3.5"
+                            fill="var(--accent)" stroke="var(--surface)" stroke-width="1.5">
+                      <title>{{ serieDiaria()[$index]?.etiqueta }}: {{ punto.valor | number:'1.1-1' }} ({{ serieDiaria()[$index]?.total }} calificaciones)</title>
+                    </circle>
                   }
-                  @for (p of puntosMatches(); track $index) {
-                    <circle [attr.cx]="p.x" [attr.cy]="p.y" r="4"
-                            fill="#6366f1" stroke="white" stroke-width="1.5"
-                            style="cursor:pointer;"
-                            (mouseenter)="mostrarTooltip(p, 'Matches generados')"
-                            (mouseleave)="ocultarTooltip()"/>
-                  }
-
-                  <!-- Etiquetas X -->
-                  @for (et of etiquetasX(); track $index) {
-                    <text [attr.x]="et.x" [attr.y]="chartHeight - padding + 16"
-                          text-anchor="middle" style="font-size:10px; fill:var(--text-sub);">
-                      {{ et.label }}
-                    </text>
+                  @for (etiqueta of etiquetasX(); track $index) {
+                    <text [attr.x]="etiqueta.x" [attr.y]="chartHeight - padding + 16"
+                          text-anchor="middle" class="svg-label">{{ etiqueta.label }}</text>
                   }
                 </svg>
+              </article>
+            </section>
 
-                <!-- Leyenda -->
-                <div style="display:flex; gap:24px; justify-content:center; margin-top:12px;">
-                  <div style="display:flex; align-items:center; gap:8px;">
-                    <div style="width:12px; height:12px; background:var(--accent); border-radius:2px; opacity:0.3;"></div>
-                    <div style="width:16px; height:3px; background:var(--accent); margin-left:-20px;"></div>
-                    <span style="font-size:13px; color:var(--text-sub);">Salas</span>
+            <section class="charts charts--wide">
+              <article class="card chart" data-testid="heatmap">
+                <p class="chart__title">Concentración de notas por día</p>
+                <p class="chart__sub">Cada celda cuenta las calificaciones de ese rango en ese día de la semana.</p>
+                <div class="heatmap" role="table" aria-label="Mapa de calor de calificaciones por día y rango de nota">
+                  <div class="heatmap__grid" role="row">
+                    <span class="heatmap__corner"></span>
+                    @for (dia of diasSemana; track dia) {
+                      <span class="heatmap__head" role="columnheader">{{ dia }}</span>
+                    }
                   </div>
-                  <div style="display:flex; align-items:center; gap:8px;">
-                    <div style="width:12px; height:12px; background:#6366f1; border-radius:2px; opacity:0.3;"></div>
-                    <div style="width:16px; height:3px; background:#6366f1; margin-left:-20px;"></div>
-                    <span style="font-size:13px; color:var(--text-sub);">Matches</span>
-                  </div>
+                  @for (fila of mapaCalor(); track fila.rango) {
+                    <div class="heatmap__grid" role="row">
+                      <span class="heatmap__row" role="rowheader">{{ fila.rango }}</span>
+                      @for (celda of fila.celdas; track celda.dia) {
+                        <span class="heatmap__cell" role="cell"
+                              [style.background]="celda.total ? 'rgba(99, 102, 241, ' + (0.15 + celda.intensidad * 0.75) + ')' : 'var(--surface2)'"
+                              [style.color]="celda.intensidad > 0.55 ? '#ffffff' : 'var(--text)'"
+                              [attr.title]="celda.dia + ' · ' + celda.rango + ': ' + celda.total + ' calificaciones'">
+                          {{ celda.total }}
+                        </span>
+                      }
+                    </div>
+                  }
                 </div>
+                <div class="heatmap__legend">
+                  <span>Menos</span>
+                  <i class="heatmap__scale"></i>
+                  <span>Más</span>
+                </div>
+              </article>
 
-                <!-- Tooltip -->
-                @if (tooltipVisible()) {
-                  <div class="chart-tooltip" [style.left.px]="tooltipPos().x" [style.top.px]="tooltipPos().y">
-                    <p style="font-size:11px; color:var(--text-sub); margin-bottom:2px;">{{ tooltipPos().fecha }}</p>
-                    <p style="font-size:13px; font-weight:500;">
-                      {{ tooltipPos().label }}: <strong>{{ tooltipPos().valor }}</strong>
-                    </p>
-                  </div>
-                }
-              </div>
-
-              <!-- Gráfica de barras: calificación promedio por día -->
-              <div class="card" style="margin-bottom:32px;">
-                <p style="font-weight:500; margin-bottom:4px;">Calificación promedio por día</p>
-                <p style="font-size:12px; color:var(--text-sub); margin-bottom:16px;">
-                  Evolución diaria de la satisfacción de los usuarios (escala 1-10)
-                </p>
-                <svg [attr.viewBox]="'0 0 ' + chartWidth + ' ' + barChartHeight"
-                     style="width:100%; height:250px;">
-                  <!-- Línea de referencia (promedio = 7) -->
-                  <line [attr.x1]="padding" 
-                        [attr.y1]="barChartHeight - padding - (7/10) * barInnerH()"
-                        [attr.x2]="chartWidth - padding"
-                        [attr.y2]="barChartHeight - padding - (7/10) * barInnerH()"
-                        stroke="var(--success)" stroke-width="1" stroke-dasharray="6,4" opacity="0.6"/>
-                  <text [attr.x]="chartWidth - padding + 4"
-                        [attr.y]="barChartHeight - padding - (7/10) * barInnerH() + 4"
-                        style="font-size:9px; fill:var(--success);">Meta (7)</text>
-
-                  <!-- Barras -->
-                  @for (barra of barrasCalificacion(); track $index) {
-                    <rect [attr.x]="barra.x" [attr.y]="barra.y"
-                          [attr.width]="barra.width" [attr.height]="barra.height"
-                          [attr.fill]="barra.color" rx="3"
-                          style="cursor:pointer;"
-                          (mouseenter)="mostrarTooltipBarra(barra)"
-                          (mouseleave)="ocultarTooltip()"/>
-                  }
-
-                  <!-- Eje X -->
-                  <line [attr.x1]="padding" [attr.y1]="barChartHeight - padding"
-                        [attr.x2]="chartWidth - padding" [attr.y2]="barChartHeight - padding"
-                        stroke="var(--border)" stroke-width="1"/>
-                  <!-- Eje Y -->
-                  <line [attr.x1]="padding" [attr.y1]="padding"
-                        [attr.x2]="padding" [attr.y2]="barChartHeight - padding"
-                        stroke="var(--border)" stroke-width="1"/>
-
-                  <!-- Etiquetas Y -->
-                  @for (v of [2, 4, 6, 8, 10]; track v) {
-                    <text [attr.x]="padding - 8" 
-                          [attr.y]="barChartHeight - padding - (v/10) * barInnerH() + 4"
-                          text-anchor="end" style="font-size:10px; fill:var(--text-sub);">
-                      {{ v }}
-                    </text>
-                  }
-                </svg>
-              </div>
-
-              <!-- Tabla de datos -->
-              <div class="card">
-                <p style="font-weight:500; margin-bottom:16px;">Detalle diario</p>
-                <div style="overflow-x:auto;">
-                  <table style="width:100%; border-collapse:collapse; font-size:13px;">
+              <article class="card chart" data-testid="tabla-detalle">
+                <p class="chart__title">Últimas calificaciones</p>
+                <p class="chart__sub">Detalle de las 12 calificaciones más recientes del periodo.</p>
+                <div class="tabla-wrap">
+                  <table>
                     <thead>
-                      <tr style="border-bottom:2px solid var(--border);">
-                        <th style="text-align:left; padding:8px 12px; color:var(--text-sub); font-weight:500;">Fecha</th>
-                        <th style="text-align:right; padding:8px 12px; color:var(--text-sub); font-weight:500;">Salas</th>
-                        <th style="text-align:right; padding:8px 12px; color:var(--text-sub); font-weight:500;">Activas</th>
-                        <th style="text-align:right; padding:8px 12px; color:var(--text-sub); font-weight:500;">Matches</th>
-                        <th style="text-align:right; padding:8px 12px; color:var(--text-sub); font-weight:500;">Promedio</th>
+                      <tr>
+                        <th>Fecha</th>
+                        <th class="num">Nota</th>
+                        <th class="num">Usuario</th>
+                        <th class="num">Sala</th>
                       </tr>
                     </thead>
                     <tbody>
-                      @for (dia of historialFiltradoReverso(); track dia.fecha) {
-                        <tr style="border-bottom:1px solid var(--border);">
-                          <td style="padding:10px 12px;">{{ formatearFecha(dia.fecha) }}</td>
-                          <td style="text-align:right; padding:10px 12px; font-weight:500;">{{ dia.totalSalas }}</td>
-                          <td style="text-align:right; padding:10px 12px; color:var(--success);">{{ dia.salasActivas }}</td>
-                          <td style="text-align:right; padding:10px 12px; font-weight:500;">{{ dia.totalMatches }}</td>
-                          <td style="text-align:right; padding:10px 12px;">
-                            @if (dia.promedioCalificacion) {
-                              <span [style.color]="getColorNota(dia.promedioCalificacion)">
-                                {{ dia.promedioCalificacion | number:'1.1-1' }}
-                              </span>
-                            } @else {
-                              <span style="color:var(--text-sub);">—</span>
-                            }
+                      @for (calificacion of ultimasCalificaciones(); track calificacion.id) {
+                        <tr>
+                          <td>{{ formatear(calificacion.fecha) }}</td>
+                          <td class="num">
+                            <span class="nota" [style.background]="colorNota(calificacion.valor)">{{ calificacion.valor }}</span>
                           </td>
+                          <td class="num">{{ calificacion.usuarioId }}</td>
+                          <td class="num">{{ calificacion.salaId }}</td>
                         </tr>
                       }
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </article>
+            </section>
 
-              <div style="text-align:center; margin-top:32px;">
-                <a routerLink="/admin/dashboard" class="btn btn--ghost">
-                  ← Volver al panel principal
-                </a>
-              </div>
-            }
+            <p class="footnote">
+              El color se usa con intención: verde para notas altas, ámbar para notas medias y rojo
+              para notas bajas. El reporte XLSX incluye resumen, serie diaria y el detalle completo.
+            </p>
           }
         </div>
-      </div>
+      </main>
     </div>
   `,
   styles: [`
-    .chart-tooltip {
-      position: absolute;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 8px 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      pointer-events: none;
-      z-index: 100;
-      transform: translateX(-50%);
+    .dash { flex: 1; padding: 28px 24px; }
+    .dash__inner { max-width: 1180px; margin: 0 auto; }
+    .dash__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+    .dash__head .section-sub { margin-bottom: 0; max-width: 720px; }
+    .export-msg { background: rgba(34, 197, 94, 0.12); border: 1px solid var(--success); color: var(--success); border-radius: var(--radius); padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
+    .export-error { background: rgba(239, 68, 68, 0.12); border: 1px solid var(--danger); color: var(--danger); border-radius: var(--radius); padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
+    .filters { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 24px; padding: 16px; }
+    .filters .form-group { flex: 1; min-width: 150px; }
+    .filters__resumen { margin-left: auto; font-size: 12px; color: var(--text-sub); padding-bottom: 10px; }
+    .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px; display: flex; flex-direction: column; gap: 2px; }
+    .kpi__value { font-family: var(--font-disp); font-size: 30px; line-height: 1.1; color: var(--accent); }
+    .kpi__unidad { font-size: 14px; color: var(--text-sub); margin-left: 2px; }
+    .kpi__label { font-size: 13px; color: var(--text); }
+    .kpi__detail { font-size: 12px; color: var(--text-sub); }
+    .sparkline { width: 100%; height: 22px; margin-top: 8px; }
+    .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .chart { padding: 18px; margin-bottom: 0; }
+    .chart__title { font-weight: 600; font-size: 14px; margin-bottom: 2px; color: var(--text); }
+    .chart__sub { font-size: 12px; color: var(--text-sub); margin-bottom: 12px; }
+    .chart svg { width: 100%; height: auto; display: block; }
+    .svg-label { font-size: 10px; fill: var(--text-sub); }
+    .svg-value { font-size: 10px; font-weight: 600; fill: var(--text); }
+    .svg-value--meta { fill: var(--success); }
+    .chart-hint { font-size: 12px; color: var(--text-sub); text-align: center; margin-top: 8px; min-height: 18px; }
+    .heatmap { display: flex; flex-direction: column; gap: 6px; }
+    .heatmap__grid { display: grid; grid-template-columns: 64px repeat(7, minmax(0, 1fr)); gap: 6px; align-items: center; }
+    .heatmap__head, .heatmap__row { font-size: 11px; color: var(--text-sub); text-align: center; }
+    .heatmap__row { text-align: left; font-weight: 500; }
+    .heatmap__cell { display: flex; align-items: center; justify-content: center; min-height: 34px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+    .heatmap__legend { display: flex; align-items: center; justify-content: flex-end; gap: 8px; font-size: 11px; color: var(--text-sub); margin-top: 12px; }
+    .heatmap__scale { width: 120px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, rgba(99, 102, 241, 0.15), rgba(99, 102, 241, 0.9)); }
+    .tabla-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 8px 10px; color: var(--text-sub); font-weight: 500; border-bottom: 2px solid var(--border); }
+    td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    .num { text-align: right; }
+    .nota { display: inline-block; min-width: 26px; padding: 2px 8px; border-radius: 12px; color: #0f0f0f; font-weight: 600; text-align: center; }
+    .empty { text-align: center; padding: 32px; margin-bottom: 24px; }
+    .empty__hint { font-size: 13px; color: var(--text-sub); margin-top: 6px; }
+    .footnote { font-size: 12px; color: var(--text-sub); text-align: center; margin-top: 8px; }
+    @media (max-width: 980px) {
+      .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .charts, .charts--wide { grid-template-columns: 1fr; }
     }
-    
-    table {
-      font-family: var(--font);
+    @media (max-width: 560px) {
+      .dash { padding: 20px 14px; }
+      .kpis { grid-template-columns: 1fr; }
+      .filters__resumen { margin-left: 0; }
+      .heatmap__grid { grid-template-columns: 48px repeat(7, minmax(0, 1fr)); gap: 4px; }
+      .heatmap__cell { min-height: 28px; font-size: 11px; }
     }
-  `]
+  `],
 })
 export class DashboardTendenciasComponent implements OnInit {
-  historial = signal<MetricasDia[]>([]);
+  readonly chartWidth = 760;
+  readonly chartHeight = 260;
+  readonly padding = 40;
+  readonly diasSemana = ORDEN_SEMANA;
+  readonly rangosNotas = ['1–5', '6–7', '8–9', '10'];
+  readonly meta = 7;
+
+  calificaciones = signal<CalificacionResponse[]>([]);
   cargando = signal(true);
+  errorCarga = signal(false);
+  exportando = signal(false);
+  msgExport = signal('');
+  errorExport = signal('');
 
   fechaDesde = signal('');
   fechaHasta = signal('');
 
-  readonly chartWidth = 800;
-  readonly chartHeight = 320;
-  readonly barChartHeight = 250;
-  readonly padding = 40;
-  readonly gridLines = [0.25, 0.5, 0.75, 1];
-
-  tooltipVisible = signal(false);
-  tooltipPos = signal({ x: 0, y: 0, fecha: '', valor: 0, label: '' });
-
   fechaMin = computed(() => {
-    const lista = this.historial();
+    const lista = this.calificaciones();
     if (!lista.length) return '';
-    return this.toDateInput(lista[0].fecha);
+    return toDateInput(lista.reduce((min, item) => (item.fecha < min ? item.fecha : min), lista[0].fecha));
   });
 
   fechaMax = computed(() => {
-    const lista = this.historial();
+    const lista = this.calificaciones();
     if (!lista.length) return '';
-    return this.toDateInput(lista[lista.length - 1].fecha);
+    return toDateInput(lista.reduce((max, item) => (item.fecha > max ? item.fecha : max), lista[0].fecha));
   });
 
-  historialFiltrado = computed(() => {
-    const lista = this.historial();
+  calificacionesFiltradas = computed(() => {
+    const lista = this.calificaciones();
     const desde = this.fechaDesde() ? new Date(this.fechaDesde()) : null;
     const hastaRaw = this.fechaHasta() ? new Date(this.fechaHasta()) : null;
     const hasta = hastaRaw
       ? new Date(hastaRaw.getFullYear(), hastaRaw.getMonth(), hastaRaw.getDate() + 1)
       : null;
-    return lista.filter(c => {
-      const fecha = this.normalizarFecha(c.fecha);
+
+    return lista.filter((calificacion) => {
+      const fecha = normalizarFecha(calificacion.fecha);
       if (desde && fecha < desde) return false;
       if (hasta && fecha >= hasta) return false;
       return true;
     });
   });
 
-  historialFiltradoReverso = computed(() => [...this.historialFiltrado()].reverse());
+  hayDatos = computed(() => this.calificacionesFiltradas().length > 0);
 
-  chartInnerH = computed(() => this.chartHeight - 2 * this.padding);
-  barInnerH = computed(() => this.barChartHeight - 2 * this.padding);
+  serieDiaria = computed<SerieDia[]>(() => {
+    const agrupado = new Map<string, number[]>();
+    this.calificacionesFiltradas().forEach((calificacion) => {
+      const clave = toDateInput(calificacion.fecha);
+      const valores = agrupado.get(clave) ?? [];
+      valores.push(calificacion.valor);
+      agrupado.set(clave, valores);
+    });
 
-  maxArea = computed(() => {
-    const lista = this.historialFiltrado();
-    if (!lista.length) return 10;
-    const max = Math.max(
-      ...lista.map(d => Math.max(d.totalSalas, d.totalMatches)),
-      10
-    );
-    return Math.ceil(max * 1.1);
+    return [...agrupado.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([fecha, valores]) => ({
+        fecha,
+        etiqueta: formatearFecha(fecha),
+        promedio: promedio(valores),
+        total: valores.length,
+        satisfaccion: (valores.filter((valor) => valor >= 8).length / valores.length) * 100,
+        riesgo: (valores.filter((valor) => valor <= 5).length / valores.length) * 100,
+      }));
   });
 
-  resumenPeriodo = computed(() => {
-    const lista = this.historialFiltrado();
-    if (!lista.length) return { promedioSalas: 0, promedioMatches: 0, diasActivos: 0 };
-    const diasActivos = lista.filter(d => d.totalSalas > 0 || d.totalMatches > 0).length;
+  resumen = computed(() => {
+    const lista = this.calificacionesFiltradas();
+    const total = lista.length;
+    const satisfechos = lista.filter((calificacion) => calificacion.valor >= 8).length;
+    const riesgoTotal = lista.filter((calificacion) => calificacion.valor <= 5).length;
     return {
-      promedioSalas: lista.reduce((s, d) => s + d.totalSalas, 0) / lista.length,
-      promedioMatches: lista.reduce((s, d) => s + d.totalMatches, 0) / lista.length,
-      diasActivos
+      total,
+      promedio: total ? promedio(lista.map((calificacion) => calificacion.valor)) : 0,
+      satisfechos,
+      riesgoTotal,
+      satisfaccion: total ? (satisfechos / total) * 100 : 0,
+      riesgo: total ? (riesgoTotal / total) * 100 : 0,
     };
   });
 
-  stepX = computed(() => {
-    const len = this.historialFiltrado().length;
-    return len <= 1 ? 0 : (this.chartWidth - 2 * this.padding) / (len - 1);
+  conclusion = computed(() => {
+    const lista = this.calificacionesFiltradas();
+    if (!lista.length) return 'Sin calificaciones en el periodo seleccionado.';
+
+    const resumen = this.resumen();
+    if (lista.length < 2) {
+      return `Promedio de ${resumen.promedio.toFixed(1)}/10 con ${resumen.satisfaccion.toFixed(0)}% de notas altas; se necesitan más calificaciones para comparar mitades.`;
+    }
+
+    const ordenadas = [...lista].sort((a, b) => a.fecha.localeCompare(b.fecha));
+    const mitad = Math.floor(ordenadas.length / 2);
+    const inicio = promedio(ordenadas.slice(0, mitad).map((calificacion) => calificacion.valor));
+    const fin = promedio(ordenadas.slice(ordenadas.length - mitad).map((calificacion) => calificacion.valor));
+    const diferencia = fin - inicio;
+    const direccion = diferencia >= 0 ? 'mejoró' : 'empeoró';
+
+    return `Promedio de ${resumen.promedio.toFixed(1)}/10 y ${resumen.satisfaccion.toFixed(0)}% de notas altas; la calificación ${direccion} ${Math.abs(diferencia).toFixed(1)} puntos entre mitades.`;
   });
 
-  lineaSalas = computed(() => {
-    const lista = this.historialFiltrado();
-    if (!lista.length) return '';
-    const max = this.maxArea();
-    const innerH = this.chartInnerH();
-    const step = this.stepX();
-    return lista.map((d, i) => {
-      const x = this.padding + i * step;
-      const y = this.chartHeight - this.padding - (d.totalSalas / max) * innerH;
-      return `${x},${y}`;
-    }).join(' ');
+  sparklinePromedio = computed(() => generarSparkline(this.serieDiaria().map((dia) => dia.promedio)));
+  sparklineTotal = computed(() => generarSparkline(this.serieDiaria().map((dia) => dia.total)));
+  sparklineSatisfaccion = computed(() => generarSparkline(this.serieDiaria().map((dia) => dia.satisfaccion)));
+  sparklineRiesgo = computed(() => generarSparkline(this.serieDiaria().map((dia) => dia.riesgo)));
+
+  periodoAnterior = computed(() => {
+    const actual = this.calificacionesFiltradas();
+    if (!actual.length) return null;
+
+    const fechas = actual.map((calificacion) => normalizarFecha(calificacion.fecha)).sort((a, b) => a.getTime() - b.getTime());
+    const inicio = fechas[0];
+    const fin = fechas[fechas.length - 1];
+    const dias = Math.max(1, Math.round((fin.getTime() - inicio.getTime()) / 86400000) + 1);
+    const limite = new Date(inicio);
+    limite.setUTCDate(limite.getUTCDate() - dias);
+
+    const previas = this.calificaciones().filter((calificacion) => {
+      const fecha = normalizarFecha(calificacion.fecha);
+      return fecha >= limite && fecha < inicio;
+    });
+
+    if (!previas.length) return null;
+
+    const total = previas.length;
+    const satisfechos = previas.filter((calificacion) => calificacion.valor >= 8).length;
+    const riesgo = previas.filter((calificacion) => calificacion.valor <= 5).length;
+
+    return {
+      total,
+      promedio: promedio(previas.map((calificacion) => calificacion.valor)),
+      satisfaccion: (satisfechos / total) * 100,
+      riesgo: (riesgo / total) * 100,
+    };
   });
 
-  lineaMatches = computed(() => {
-    const lista = this.historialFiltrado();
-    if (!lista.length) return '';
-    const max = this.maxArea();
-    const innerH = this.chartInnerH();
-    const step = this.stepX();
-    return lista.map((d, i) => {
-      const x = this.padding + i * step;
-      const y = this.chartHeight - this.padding - (d.totalMatches / max) * innerH;
-      return `${x},${y}`;
-    }).join(' ');
-  });
-
-  areaSalas = computed(() => {
-    const lista = this.historialFiltrado();
-    if (!lista.length) return '';
-    const line = this.lineaSalas();
-    const ultimoX = this.padding + (lista.length - 1) * this.stepX();
-    return `${this.padding},${this.chartHeight - this.padding} ${line} ${ultimoX},${this.chartHeight - this.padding}`;
-  });
-
-  areaMatches = computed(() => {
-    const lista = this.historialFiltrado();
-    if (!lista.length) return '';
-    const line = this.lineaMatches();
-    const ultimoX = this.padding + (lista.length - 1) * this.stepX();
-    return `${this.padding},${this.chartHeight - this.padding} ${line} ${ultimoX},${this.chartHeight - this.padding}`;
-  });
-
-  puntosSalas = computed((): PuntoDatos[] => {
-    const lista = this.historialFiltrado();
+  hallazgos = computed(() => {
+    const lista = this.calificacionesFiltradas();
     if (!lista.length) return [];
-    const max = this.maxArea();
-    const innerH = this.chartInnerH();
-    const step = this.stepX();
-    return lista.map((d, i) => ({
-      x: this.padding + i * step,
-      y: this.chartHeight - this.padding - (d.totalSalas / max) * innerH,
-      valor: d.totalSalas,
-      fecha: this.formatearFecha(d.fecha),
-      fechaLabel: d.fecha
+
+    const resumen = this.resumen();
+    const resultado: string[] = [
+      `El periodo cerró con ${resumen.total} calificaciones y un promedio de ${resumen.promedio.toFixed(1)}/10.`,
+      `${resumen.satisfaccion.toFixed(0)}% de las calificaciones fueron altas (≥8) y ${resumen.riesgo.toFixed(0)}% fueron bajas (≤5).`,
+    ];
+
+    const mejoresDias = [...this.serieDiaria()]
+      .filter((dia) => dia.total > 0)
+      .sort((a, b) => b.promedio - a.promedio);
+    if (mejoresDias.length >= 2) {
+      resultado.push(
+        `El ${mejoresDias[0].etiqueta} tuvo el mejor promedio (${mejoresDias[0].promedio.toFixed(1)}) y el ${mejoresDias[mejoresDias.length - 1].etiqueta} el más bajo (${mejoresDias[mejoresDias.length - 1].promedio.toFixed(1)}).`,
+      );
+    }
+
+    const mitades = this.compararMitades();
+    if (mitades) {
+      resultado.push(
+        `La calificación ${mitades.diferencia >= 0 ? 'mejoró' : 'empeoró'} ${Math.abs(mitades.diferencia).toFixed(1)} puntos entre la primera y la segunda mitad.`,
+      );
+    }
+
+    return resultado;
+  });
+
+  recomendaciones = computed(() => {
+    const resumen = this.resumen();
+    const mitades = this.compararMitades();
+    const resultado: string[] = [];
+
+    if (resumen.riesgo > 10) {
+      resultado.push('Revisar las salas con calificaciones de 1 a 5 y dar seguimiento a sus usuarios.');
+    } else {
+      resultado.push('Mantener el nivel de servicio: el riesgo de notas bajas está dentro de la meta.');
+    }
+    if (resumen.satisfaccion < 70) {
+      resultado.push('Reforzar la calidad percibida para llevar la satisfacción por encima del 70%.');
+    } else {
+      resultado.push('Documentar las prácticas del periodo para sostener la satisfacción actual.');
+    }
+    if (mitades && mitades.diferencia < 0) {
+      resultado.push('Investigar la caída de calificación de la segunda mitad del periodo.');
+    }
+    resultado.push('Analizar las notas de 6 y 7 para convertirlas en experiencias de 8 o más.');
+
+    return resultado;
+  });
+
+  indicadores = computed<IndicadorReporte[]>(() => {
+    const resumen = this.resumen();
+    const mitades = this.compararMitades();
+    const diferencia = mitades?.diferencia ?? 0;
+
+    return [
+      {
+        indicador: 'Promedio de calificación',
+        valor: Number(resumen.promedio.toFixed(1)),
+        meta: '≥ 7.0',
+        estado: resumen.promedio >= 7 ? 'En meta' : resumen.promedio >= 6 ? 'En riesgo' : 'Fuera de meta',
+      },
+      {
+        indicador: 'Satisfacción (≥ 8)',
+        valor: `${resumen.satisfaccion.toFixed(1)}%`,
+        meta: '≥ 70%',
+        estado: resumen.satisfaccion >= 70 ? 'En meta' : resumen.satisfaccion >= 55 ? 'En riesgo' : 'Fuera de meta',
+      },
+      {
+        indicador: 'Riesgo (≤ 5)',
+        valor: `${resumen.riesgo.toFixed(1)}%`,
+        meta: '≤ 10%',
+        estado: resumen.riesgo <= 10 ? 'En meta' : resumen.riesgo <= 20 ? 'En riesgo' : 'Fuera de meta',
+      },
+      {
+        indicador: 'Tendencia entre mitades',
+        valor: `${diferencia >= 0 ? '+' : ''}${diferencia.toFixed(1)} pts`,
+        meta: '≥ 0 pts',
+        estado: diferencia >= 0 ? 'En meta' : diferencia >= -0.5 ? 'En riesgo' : 'Fuera de meta',
+      },
+    ];
+  });
+
+  distribucionTabla = computed(() => {
+    const total = this.resumen().total;
+    return this.distribucion().map((barra) => [
+      barra.valor,
+      barra.total,
+      Number(barra.porcentaje.toFixed(1)),
+    ]);
+  });
+
+  distribucion = computed(() => {
+    const lista = this.calificacionesFiltradas();
+    const total = lista.length;
+    const conteos = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((valor) => ({
+      valor,
+      total: lista.filter((calificacion) => calificacion.valor === valor).length,
     }));
-  });
+    const maximo = Math.max(...conteos.map((item) => item.total), 1);
+    const anchoUtil = this.chartWidth - 2 * this.padding;
+    const anchoBarra = (anchoUtil / conteos.length) * 0.6;
+    const altoUtil = this.chartHeight - 2 * this.padding;
 
-  puntosMatches = computed((): PuntoDatos[] => {
-    const lista = this.historialFiltrado();
-    if (!lista.length) return [];
-    const max = this.maxArea();
-    const innerH = this.chartInnerH();
-    const step = this.stepX();
-    return lista.map((d, i) => ({
-      x: this.padding + i * step,
-      y: this.chartHeight - this.padding - (d.totalMatches / max) * innerH,
-      valor: d.totalMatches,
-      fecha: this.formatearFecha(d.fecha),
-      fechaLabel: d.fecha
-    }));
-  });
-
-  etiquetasX = computed(() => {
-    const lista = this.historialFiltrado();
-    if (!lista.length) return [];
-    const step = this.stepX();
-    const maxEtiquetas = Math.min(lista.length, 10);
-    const intervalo = Math.max(1, Math.ceil(lista.length / maxEtiquetas));
-    return lista
-      .map((d, i) => ({
-        x: this.padding + i * step,
-        label: this.formatearFechaCorta(d.fecha)
-      }))
-      .filter((_, i) => i % intervalo === 0 || i === lista.length - 1);
-  });
-
-  barrasCalificacion = computed(() => {
-    const lista = this.historialFiltrado().filter(d => d.promedioCalificacion !== null && d.promedioCalificacion > 0);
-    if (!lista.length) return [];
-    const innerH = this.barInnerH();
-    const innerW = this.chartWidth - 2 * this.padding;
-    const barWidth = Math.min(30, (innerW / lista.length) * 0.7);
-    const gap = (innerW - barWidth * lista.length) / (lista.length + 1);
-    return lista.map((d, i) => {
-      const x = this.padding + gap + i * (barWidth + gap);
-      const height = ((d.promedioCalificacion ?? 0) / 10) * innerH;
-      const y = this.barChartHeight - this.padding - height;
-      let color = 'var(--accent)';
-      if ((d.promedioCalificacion ?? 0) >= 8) color = 'var(--success)';
-      else if ((d.promedioCalificacion ?? 0) < 5) color = 'var(--danger)';
+    return conteos.map((item, indice) => {
+      const centro = this.padding + (indice + 0.5) * (anchoUtil / conteos.length);
+      const alto = (item.total / maximo) * altoUtil;
+      const color = item.valor >= 8 ? 'var(--success)' : item.valor >= 6 ? '#f59e0b' : 'var(--danger)';
       return {
-        x, y, width: barWidth, height, color,
-        valor: d.promedioCalificacion ?? 0,
-        fecha: this.formatearFecha(d.fecha)
+        ...item,
+        x: centro - anchoBarra / 2,
+        ancho: anchoBarra,
+        alto,
+        y: this.chartHeight - this.padding - alto,
+        porcentaje: total ? (item.total / total) * 100 : 0,
+        color,
       };
     });
   });
 
+  lineaPromedio = computed(() =>
+    generarLinea(
+      this.serieDiaria().map((dia) => dia.promedio),
+      { ancho: this.chartWidth, alto: this.chartHeight, padding: this.padding, maximo: 10 },
+    ),
+  );
+
+  puntosPromedio = computed(() =>
+    generarPuntos(
+      this.serieDiaria().map((dia) => dia.promedio),
+      { ancho: this.chartWidth, alto: this.chartHeight, padding: this.padding, maximo: 10 },
+    ),
+  );
+
+  guiasPromedio = computed(() =>
+    [0, 2, 4, 6, 8, 10].map((valor) => ({
+      valor,
+      y: posicionY(valor, this.chartHeight, this.padding, 10),
+    })),
+  );
+
+  metaY = computed(() => posicionY(this.meta, this.chartHeight, this.padding, 10));
+
+  etiquetasX = computed(() => {
+    const serie = this.serieDiaria();
+    if (!serie.length) return [];
+    const paso = serie.length <= 7 ? 1 : Math.ceil(serie.length / 7);
+    const anchoUtil = this.chartWidth - 2 * this.padding;
+    const pasoX = anchoUtil / (serie.length - 1 || 1);
+
+    return serie
+      .map((dia, indice) => ({
+        x: this.padding + indice * pasoX,
+        label: formatearFechaCorta(dia.fecha),
+      }))
+      .filter((_, indice) => indice % paso === 0 || indice === serie.length - 1);
+  });
+
+  mapaCalor = computed(() => {
+    const lista = this.calificacionesFiltradas();
+    const celdas: CeldaCalor[] = [];
+
+    this.rangosNotas.forEach((rango) => {
+      this.diasSemana.forEach((dia) => {
+        const total = lista.filter((calificacion) => {
+          const mismoDia = diaSemana(calificacion.fecha) === dia;
+          const valor = calificacion.valor;
+          const enRango =
+            (rango === '1–5' && valor <= 5) ||
+            (rango === '6–7' && valor >= 6 && valor <= 7) ||
+            (rango === '8–9' && valor >= 8 && valor <= 9) ||
+            (rango === '10' && valor === 10);
+          return mismoDia && enRango;
+        }).length;
+        celdas.push({ dia, rango, total, intensidad: 0 });
+      });
+    });
+
+    const maximo = Math.max(...celdas.map((celda) => celda.total), 1);
+    const filas = this.rangosNotas.map((rango) => ({
+      rango,
+      celdas: celdas
+        .filter((celda) => celda.rango === rango)
+        .map((celda) => ({ ...celda, intensidad: celda.total / maximo })),
+    }));
+
+    return filas;
+  });
+
+  ultimasCalificaciones = computed(() =>
+    [...this.calificacionesFiltradas()]
+      .sort((a, b) => b.fecha.localeCompare(a.fecha))
+      .slice(0, 12),
+  );
+
   constructor(
-    private metricasSvc: MetricasService,
-    private auth: AuthService
+    private retroSvc: RetroalimentacionService,
+    private reporteSvc: ReporteXlsxService,
+    private auth: AuthService,
   ) {}
 
   ngOnInit(): void {
-    this.metricasSvc.getHistorial().subscribe({
-      next: (data) => { this.historial.set(data); this.cargando.set(false); },
-      error: () => this.cargando.set(false)
+    this.retroSvc.getAll().subscribe({
+      next: (datos) => {
+        this.calificaciones.set(datos);
+        this.cargando.set(false);
+      },
+      error: () => {
+        this.errorCarga.set(true);
+        this.cargando.set(false);
+      },
     });
-  }
-
-  aplicarPeriodoRapido(periodo: string): void {
-    if (!periodo) return;
-    const lista = this.historial();
-    if (!lista.length) return;
-
-    if (periodo === 'all') {
-      this.fechaDesde.set('');
-      this.fechaHasta.set('');
-      return;
-    }
-
-    const dias = parseInt(periodo);
-    const ultimaFecha = this.normalizarFecha(lista[lista.length - 1].fecha);
-    const desde = new Date(ultimaFecha);
-    desde.setDate(desde.getDate() - dias + 1);
-    this.fechaDesde.set(this.toDateInput(desde));
-    this.fechaHasta.set(this.toDateInput(ultimaFecha));
   }
 
   limpiarFiltro(): void {
@@ -517,61 +701,190 @@ export class DashboardTendenciasComponent implements OnInit {
     this.fechaHasta.set('');
   }
 
-  logout(): void { this.auth.logout(); }
-
-  mostrarTooltip(punto: PuntoDatos, label: string): void {
-    this.tooltipPos.set({
-      x: punto.x,
-      y: punto.y - 50,
-      fecha: punto.fecha,
-      valor: punto.valor,
-      label
-    });
-    this.tooltipVisible.set(true);
+  formatear(fecha: string): string {
+    return formatearFecha(fecha);
   }
 
-  mostrarTooltipBarra(barra: { x: number; y: number; valor: number; fecha: string }): void {
-    this.tooltipPos.set({
-      x: barra.x + 15,
-      y: barra.y - 40,
-      fecha: barra.fecha,
-      valor: barra.valor,
-      label: 'Promedio'
-    });
-    this.tooltipVisible.set(true);
-  }
-
-  ocultarTooltip(): void {
-    this.tooltipVisible.set(false);
-  }
-
-  getColorNota(valor: number): string {
+  colorNota(valor: number): string {
     if (valor >= 8) return 'var(--success)';
     if (valor >= 6) return '#f59e0b';
     return 'var(--danger)';
   }
 
-  formatearFecha(fechaStr: string): string {
-    return this.normalizarFecha(fechaStr)
-      .toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+  logout(): void {
+    this.auth.logout();
   }
 
-  formatearFechaCorta(fechaStr: string): string {
-    return this.normalizarFecha(fechaStr)
-      .toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
+  async exportar(): Promise<void> {
+    if (!this.hayDatos() || this.exportando()) return;
+
+    this.exportando.set(true);
+    this.msgExport.set('');
+    this.errorExport.set('');
+
+    const resumen = this.resumen();
+    const serie = this.serieDiaria();
+    const anterior = this.periodoAnterior();
+    const periodo = this.periodoTexto();
+    const comparar = (actual: number, previo: number | undefined, menorEsMejor = false) => {
+      const variacion = previo == null || previo === 0 ? null : ((actual - previo) / previo) * 100;
+      return {
+        variacion,
+        variacionPositiva: previo == null ? true : menorEsMejor ? actual <= previo : actual >= previo,
+      };
+    };
+
+    try {
+      await this.reporteSvc.descargar({
+        nombreArchivo: 'cinematch-dashboard-satisfaccion',
+        portada: {
+          titulo: 'Satisfacción y calidad',
+          subtitulo: 'Reporte ejecutivo de experiencia del usuario',
+          responsable: 'Sushikiu · susanaortega360@gmail.com',
+          periodo,
+          indice: [
+            'Resumen ejecutivo',
+            'Serie diaria de satisfacción',
+            'Detalle de calificaciones',
+            'Metodología y definición de indicadores',
+          ],
+        },
+        resumen: {
+          titulo: 'Satisfacción y calidad',
+          lectura: this.conclusion(),
+          kpis: [
+            {
+              etiqueta: 'Promedio de calificación',
+              valor: Number(resumen.promedio.toFixed(1)),
+              formato: 'decimal',
+              detalle: 'Escala de 1 a 10 · meta 7.0',
+              ...comparar(resumen.promedio, anterior?.promedio),
+            },
+            {
+              etiqueta: 'Calificaciones recibidas',
+              valor: resumen.total,
+              formato: 'entero',
+              detalle: `${serie.length} días con datos`,
+              ...comparar(resumen.total, anterior?.total),
+            },
+            {
+              etiqueta: 'Satisfacción (nota ≥ 8)',
+              valor: Number(resumen.satisfaccion.toFixed(1)),
+              formato: 'porcentaje',
+              detalle: `${resumen.satisfechos} calificaciones altas`,
+              ...comparar(resumen.satisfaccion, anterior?.satisfaccion),
+            },
+            {
+              etiqueta: 'Riesgo (nota ≤ 5)',
+              valor: Number(resumen.riesgo.toFixed(1)),
+              formato: 'porcentaje',
+              detalle: `${resumen.riesgoTotal} calificaciones bajas`,
+              ...comparar(resumen.riesgo, anterior?.riesgo, true),
+            },
+          ],
+          indicadores: this.indicadores(),
+          hallazgos: this.hallazgos(),
+          recomendaciones: this.recomendaciones(),
+          destacada: {
+            titulo: 'Distribución por nota',
+            columnas: [
+              { titulo: 'Nota', ancho: 10, tipo: 'entero' },
+              { titulo: 'Calificaciones', ancho: 16, tipo: 'entero' },
+              { titulo: 'Porcentaje (%)', ancho: 16, tipo: 'porcentaje' },
+            ],
+            filas: this.distribucionTabla(),
+            columnaBarras: 1,
+          },
+        },
+        metodologia: {
+          titulo: 'Metodología del reporte',
+          puntos: [
+            'Fuente: consulta GraphQL retroalimentacion, con el registro de calificaciones de la plataforma.',
+            'Promedio: media aritmética de las calificaciones del periodo, en escala de 1 a 10.',
+            'Satisfacción: porcentaje de calificaciones con nota mayor o igual a 8.',
+            'Riesgo: porcentaje de calificaciones con nota menor o igual a 5.',
+            'Tendencia: diferencia de promedio entre la primera y la segunda mitad del periodo.',
+            'Comparativo: ventana inmediatamente anterior de la misma duración que el periodo seleccionado.',
+            'El reporte exporta exactamente las calificaciones filtradas en el dashboard al momento de la descarga.',
+          ],
+        },
+        hojas: [
+          {
+            nombre: 'Serie diaria',
+            titulo: 'Serie diaria de satisfacción',
+            subtitulo: 'Promedio y proporción de notas altas por fecha.',
+            periodo,
+            columnas: [
+              { titulo: 'Fecha', ancho: 14, tipo: 'texto' },
+              { titulo: 'Promedio', ancho: 12, tipo: 'decimal' },
+              { titulo: 'Calificaciones', ancho: 15, tipo: 'entero' },
+              { titulo: 'Satisfacción (%)', ancho: 16, tipo: 'porcentaje' },
+              { titulo: 'Riesgo (%)', ancho: 12, tipo: 'porcentaje' },
+            ],
+            filas: serie.map((dia) => [
+              dia.etiqueta,
+              Number(dia.promedio.toFixed(1)),
+              dia.total,
+              Number(dia.satisfaccion.toFixed(1)),
+              Number(dia.riesgo.toFixed(1)),
+            ]),
+            totales: [
+              'Total',
+              Number(resumen.promedio.toFixed(1)),
+              resumen.total,
+              Number(resumen.satisfaccion.toFixed(1)),
+              Number(resumen.riesgo.toFixed(1)),
+            ],
+            barrasDatos: [2, 3, 4],
+            escalaColor: { columna: 1, minimo: 1, maximo: 10 },
+          },
+          {
+            nombre: 'Calificaciones',
+            titulo: 'Detalle de calificaciones',
+            subtitulo: 'Registro completo de las calificaciones del periodo.',
+            periodo,
+            columnas: [
+              { titulo: 'ID', ancho: 10, tipo: 'entero' },
+              { titulo: 'Fecha', ancho: 22, tipo: 'texto' },
+              { titulo: 'Calificación', ancho: 14, tipo: 'entero' },
+              { titulo: 'Usuario ID', ancho: 12, tipo: 'entero' },
+              { titulo: 'Sala ID', ancho: 12, tipo: 'entero' },
+            ],
+            filas: [...this.calificacionesFiltradas()]
+              .sort((a, b) => b.fecha.localeCompare(a.fecha))
+              .map((calificacion) => [
+                calificacion.id,
+                formatearFecha(calificacion.fecha),
+                calificacion.valor,
+                calificacion.usuarioId,
+                calificacion.salaId,
+              ]),
+            escalaColor: { columna: 2, minimo: 1, maximo: 10 },
+          },
+        ],
+      });
+      this.msgExport.set('Reporte ejecutivo XLSX generado con los datos del periodo.');
+    } catch {
+      this.errorExport.set('No se pudo generar el reporte. Intenta de nuevo.');
+    } finally {
+      this.exportando.set(false);
+    }
   }
 
-  private toDateInput(fecha: string | Date): string {
-    const d = typeof fecha === 'string' ? this.normalizarFecha(fecha) : fecha;
-    const yyyy = d.getUTCFullYear();
-    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const dd = String(d.getUTCDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+  private compararMitades(): { diferencia: number } | null {
+    const lista = [...this.calificacionesFiltradas()].sort((a, b) => a.fecha.localeCompare(b.fecha));
+    if (lista.length < 2) return null;
+
+    const mitad = Math.floor(lista.length / 2);
+    const inicio = promedio(lista.slice(0, mitad).map((calificacion) => calificacion.valor));
+    const fin = promedio(lista.slice(lista.length - mitad).map((calificacion) => calificacion.valor));
+    return { diferencia: fin - inicio };
   }
 
-  private normalizarFecha(fechaStr: string): Date {
-    const normalizada = fechaStr.includes('Z') || fechaStr.includes('+')
-      ? fechaStr : fechaStr + 'Z';
-    return new Date(normalizada);
+  private periodoTexto(): string {
+    const lista = this.calificacionesFiltradas();
+    if (!lista.length) return 'Sin datos';
+    const fechas = lista.map((calificacion) => toDateInput(calificacion.fecha)).sort();
+    return `${this.fechaDesde() || fechas[0]} a ${this.fechaHasta() || fechas[fechas.length - 1]}`;
   }
 }

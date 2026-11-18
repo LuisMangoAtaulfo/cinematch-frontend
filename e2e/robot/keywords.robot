@@ -4,6 +4,7 @@ Library           SeleniumLibrary
 Library           Collections
 Library           String
 Library           OperatingSystem
+Library           Process
 Resource          variables.robot
 
 *** Keywords ***
@@ -12,23 +13,75 @@ Resource          variables.robot
 # ══════════════════════════════════════════════
 
 Abrir Navegador
-    [Documentation]    Abre el navegador y maximiza la ventana
-    IF    ${HEADLESS}
-        IF    '${BROWSER}' == 'firefox'
-            ${options}=    Evaluate    sys.modules['selenium.webdriver'].FirefoxOptions()
+    [Documentation]    Abre el navegador, configura descargas XLSX y maximiza la ventana
+    Create Directory    ${DOWNLOADS_DIR}
+    IF    '${BROWSER}' == 'firefox'
+        ${options}=    Evaluate    sys.modules['selenium.webdriver'].FirefoxOptions()
+        Evaluate    $options.set_preference('browser.download.dir', '${DOWNLOADS_DIR}')
+        Evaluate    $options.set_preference('browser.download.folderList', 2)
+        Evaluate    $options.set_preference('browser.download.useDownloadDir', True)
+        Evaluate    $options.set_preference('browser.helperApps.neverAsk.saveToDisk', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        IF    ${HEADLESS}
             Evaluate    $options.add_argument('--headless')
-        ELSE IF    '${BROWSER}' == 'chrome'
+        END
+        Open Browser    ${BASE_URL}    ${BROWSER}    options=${options}
+    ELSE
+        IF    ${HEADLESS}
             ${options}=    Evaluate    sys.modules['selenium.webdriver'].ChromeOptions()
             Evaluate    $options.add_argument('--headless')
             Evaluate    $options.add_argument('--no-sandbox')
             Evaluate    $options.add_argument('--disable-dev-shm-usage')
+            Open Browser    ${BASE_URL}    ${BROWSER}    options=${options}
+        ELSE
+            Open Browser    ${BASE_URL}    ${BROWSER}
         END
-        Open Browser    ${BASE_URL}    ${BROWSER}    options=${options}
-    ELSE
-        Open Browser    ${BASE_URL}    ${BROWSER}
     END
     Maximize Browser Window
     Set Selenium Timeout    ${TIMEOUT}
+
+Limpiar Descargas
+    [Documentation]    Elimina los archivos XLSX descargados en ejecuciones anteriores
+    Create Directory    ${DOWNLOADS_DIR}
+    Remove Files    ${DOWNLOADS_DIR}/*.xlsx
+
+Esperar Descarga XLSX
+    [Documentation]    Espera a que se descargue un XLSX cuyo nombre contenga el texto esperado
+    [Arguments]    ${nombre_esperado}
+    Wait Until Keyword Succeeds    30s    1s    Verificar Descarga XLSX    ${nombre_esperado}
+
+Verificar Descarga XLSX
+    [Documentation]    Comprueba que existe un XLSX descargado, con nombre y tamaño válidos
+    [Arguments]    ${nombre_esperado}
+    ${archivo}=    Obtener Archivo XLSX    ${nombre_esperado}
+    ${tamano}=    Get File Size    ${archivo}
+    Should Be True    ${tamano} > 0    El archivo XLSX descargado está vacío
+
+Obtener Archivo XLSX
+    [Documentation]    Devuelve el primer XLSX descargado que coincida con el nombre esperado
+    [Arguments]    ${nombre_esperado}
+    @{archivos}=    List Files In Directory    ${DOWNLOADS_DIR}    *.xlsx
+    Should Not Be Empty    ${archivos}    No se descargó ningún archivo XLSX
+    ${archivo}=    Get From List    ${archivos}    0
+    Should Contain    ${archivo}    ${nombre_esperado}
+    RETURN    ${archivo}
+
+Verificar Hojas XLSX
+    [Documentation]    Verifica que el XLSX descargado contenga las hojas indicadas
+    [Arguments]    ${nombre_esperado}    @{hojas}
+    ${archivo}=    Obtener Archivo XLSX    ${nombre_esperado}
+    ${salida}=    Run Process    python3    ${CURDIR}/verificar_xlsx.py    ${archivo}
+    Should Be Equal As Integers    ${salida.rc}    0    ${salida.stderr}
+    FOR    ${hoja}    IN    @{hojas}
+        Should Contain    ${salida.stdout}    ${hoja}
+    END
+
+Establecer Rango De Fechas
+    [Documentation]    Escribe las fechas desde/hasta y dispara el evento change de Angular
+    [Arguments]    ${desde}    ${hasta}
+    Wait Until Element Is Visible    id=desde    ${TIMEOUT}
+    Execute JavaScript    const desde = document.getElementById('desde'); desde.value = '${desde}'; desde.dispatchEvent(new Event('change', { bubbles: true }));
+    Execute JavaScript    const hasta = document.getElementById('hasta'); hasta.value = '${hasta}'; hasta.dispatchEvent(new Event('change', { bubbles: true }));
+    Sleep    1s
 
 Generar ID Aleatorio
     [Documentation]    Genera un identificador aleatorio para correos únicos en tests

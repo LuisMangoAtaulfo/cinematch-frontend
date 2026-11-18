@@ -4,7 +4,7 @@ Documentación detallada de la suite E2E ubicada en [`e2e/robot/`](../../e2e/rob
 Para la guía rápida de instalación y ejecución consulta el [README](../../README.md#-pruebas-automatizadas-robot-framework).
 
 - **Herramientas:** Robot Framework 7.5.1 · SeleniumLibrary 6.9.0 · Firefox + geckodriver
-- **Alcance:** 143 casos de prueba que cubren los casos de uso CU-01 … CU-12
+- **Alcance:** 165 casos de prueba que cubren los casos de uso CU-01 … CU-12
 - **Tipo:** pruebas de caja negra sobre la UI (Angular) contra el backend real (Spring Boot + PostgreSQL)
 
 ---
@@ -24,6 +24,8 @@ e2e/robot/
 ├── test_admin.robot             # 21 casos
 ├── test_seguridad.robot         # 22 casos
 ├── test_e2e.robot               # 13 casos
+├── test_dashboard_actividad.robot # 11 casos
+├── test_dashboard_satisfaccion.robot # 11 casos
 ├── diagnostico/                 # Pruebas auxiliares de depuración (NO forman parte del plan)
 │   ├── test_diag.robot
 │   └── test_min.robot
@@ -57,10 +59,12 @@ test_*.robot  ──usa──▶  keywords.robot  ──usa──▶  variables.
 | `test_admin.robot` | 21 | `TC-ADMIN-` | CU-10, CU-11, CU-12 | Sistema |
 | `test_seguridad.robot` | 22 | `TC-SEG-` | Transversal (guards, roles) | Sistema |
 | `test_e2e.robot` | 13 | `TC-E2E-` | Flujos completos | Regresión |
-| **Total** | **143** | | | Unitarias 28 · Integrales 59 · Sistema 43 · Regresión 13 |
+| `test_dashboard_actividad.robot` | 11 | `TC-DASH-A-` | CU-10, CU-11 (dashboard) | Sistema |
+| `test_dashboard_satisfaccion.robot` | 11 | `TC-DASH-B-` | CU-10, CU-11 (dashboard) | Sistema |
+| **Total** | **165** | | | Unitarias 28 · Integrales 59 · Sistema 65 · Regresión 13 |
 
 > La carpeta `diagnostico/` contiene 2 pruebas extra (`TC-DIAG`, `TC-MIN`) con el tag `diagnostico`.
-> `run_tests.sh` las **excluye por defecto**, por lo que una corrida completa reporta 143 pruebas.
+> `run_tests.sh` las **excluye por defecto**, por lo que una corrida completa reporta 165 pruebas.
 
 ---
 
@@ -76,7 +80,8 @@ Cada caso tiene `[Tags]` que permiten filtrar con `./run_tests.sh --tag <tag>`:
 | `ui`, `navegacion` | Comportamiento visual y navegación |
 | `e2e` | Flujos completos |
 | `manual`, `requiere-dos-navegadores`, `tiempo-real` | Casos que dependen de dos sesiones simultáneas o WebSocket |
-| Por módulo | `auth`, `login`, `registro`, `sala`, `filtros`, `swipe`, `chat`, `admin`, `perfil`, `matches`, `resultados`, `calificacion`… |
+| Por módulo | `auth`, `login`, `registro`, `sala`, `filtros`, `swipe`, `chat`, `admin`, `perfil`, `matches`, `resultados`, `calificacion`, `dashboard`… |
+| `export` | Casos que verifican la descarga del reporte XLSX |
 | `diagnostico` | Pruebas auxiliares de depuración (excluidas por defecto) |
 
 ---

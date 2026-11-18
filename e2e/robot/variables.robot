@@ -21,6 +21,7 @@ ${RESULTADOS_URL}      ${BASE_URL}/resultados
 ${CALIFICACION_URL}    ${BASE_URL}/calificacion
 ${ADMIN_LOGIN_URL}     ${BASE_URL}/admin/login
 ${ADMIN_DASHBOARD_URL}    ${BASE_URL}/admin/dashboard
+${ADMIN_TENDENCIAS_URL}   ${BASE_URL}/admin/dashboard/tendencias
 ${ADMIN_METRICAS_URL}  ${BASE_URL}/admin/metricas
 ${ADMIN_PLAT_URL}      ${BASE_URL}/admin/plataformas
 ${ADMIN_RETRO_URL}     ${BASE_URL}/admin/retroalimentacion
@@ -106,6 +107,12 @@ ${BTN_CANCELAR_PERFIL}    xpath=//button[contains(text(), 'Cancelar')]
 
 # Selectors - Admin
 ${BTN_INGRESAR_ADMIN}  xpath=//button[contains(text(), 'Ingresar')]
+
+# Selectors - Dashboards
+${BTN_EXPORTAR_XLSX}   css=[data-testid=btn-exportar-xlsx]
+${MSG_EXPORT_OK}       css=[data-testid=msg-export-ok]
+${DASHBOARD_VACIO}     css=[data-testid=dashboard-vacio]
+${DOWNLOADS_DIR}       ${CURDIR}/results/downloads
 ${INPUT_FECHA_DESDE}   id=desde
 ${INPUT_FECHA_HASTA}   id=hasta
 ${BTN_LIMPIAR}         xpath=//button[contains(text(), 'Limpiar')]
