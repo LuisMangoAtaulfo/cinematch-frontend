@@ -94,6 +94,7 @@ Los seeds viven en el **repositorio del backend** (`cinematch-backend/misc/scrip
 |---|---|
 | `seed_usuarios_robot.sql` | `test1@cinematch.com` / `Test1234`, `test2@cinematch.com` / `Test1234`, `admin@cinematch.com` / `Admin1234` |
 | `seed_plataformas_robot.sql` | Netflix, Disney+, HBO Max, Amazon Prime Video, Apple TV+, Paramount+, Hulu, Crunchyroll (habilitadas) |
+| `seed_dashboard_demo.sql` | 90 días de actividad demo (~1,200 salas) con usuarios `demo01`…`demo12`. **Borra tablas transaccionales locales**; no toca usuarios, contenidos ni plataformas |
 
 Alternativa sin `psql`: desde el backend ejecutar `./mvnw test -Dtest=CargaUsuariosRobotTest`, que crea los mismos usuarios con el `PasswordEncoder` de la aplicación.
 
@@ -160,7 +161,32 @@ El documento *Plan de Pruebas* se generó a partir de un `output-*.xml` con los 
 
 ---
 
-## 7. Problemas conocidos y solución
+## 7. Descargas XLSX y reportes ejecutivos
+
+Las suites `test_dashboard_actividad.robot` y `test_dashboard_satisfaccion.robot`
+verifican la descarga real del reporte y su estructura:
+
+- `Abrir Navegador` configura Firefox para descargar en
+  `e2e/robot/results/downloads` sin preguntar (incluido `--headless`).
+- `Limpiar Descargas` elimina los `.xlsx` de corridas anteriores.
+- `Esperar Descarga XLSX` espera hasta 30 s a que aparezca el archivo.
+- `Verificar Hojas XLSX` usa `verificar_xlsx.py`, que lee `xl/workbook.xml`
+  con `zipfile` (solo librería estándar) y valida las hojas esperadas.
+
+Hojas esperadas:
+
+| Reporte | Hojas |
+|---|---|
+| Actividad | Portada · Resumen ejecutivo · Serie diaria · Día de semana · Metodología |
+| Satisfacción | Portada · Resumen ejecutivo · Serie diaria · Calificaciones · Metodología |
+
+El reporte se genera en el navegador con ExcelJS y exporta solo el periodo
+filtrado. No usa gráficas de imagen: tablas formateadas, barras de datos y
+escala de color.
+
+---
+
+## 8. Problemas conocidos y solución
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|
@@ -170,5 +196,5 @@ El documento *Plan de Pruebas* se generó a partir de un `output-*.xml` con los 
 | `TestModeNotEnabledException` | Backend con `app.test-mode=false` | Activar `app.test-mode=true` en `application.properties` |
 | `WebDriverException: … geckodriver` | geckodriver no está en el `PATH` o Firefox es snap | Ver README → Firefox y geckodriver en WSL |
 | `Error: no DISPLAY environment variable` | WSL sin interfaz gráfica | Usar `./run_tests.sh --headless` |
-| La terminal reporta 145 pruebas | Se ejecutó `robot` directamente sin excluir `diagnostico` | Usar `run_tests.sh` o añadir `--exclude diagnostico` |
+| La terminal reporta 167 pruebas | Se ejecutó `robot` directamente sin excluir `diagnostico` | Usar `run_tests.sh` o añadir `--exclude diagnostico` |
 | TC-E2E-001 y TC-E2E-008 fallan de forma intermitente | Flujos largos sensibles a tiempos/estado | Reintentar con BD limpia; documentado en el Plan de Pruebas |
