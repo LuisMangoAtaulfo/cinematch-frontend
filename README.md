@@ -128,7 +128,7 @@ WSL reenvía `localhost` a Windows, así que puedes abrir http://localhost:4200 
 
 ## 🤖 Pruebas automatizadas (Robot Framework)
 
-La suite E2E (153 casos) controla Firefox para recorrer la aplicación real.
+La suite E2E (154 casos) controla Firefox para recorrer la aplicación real.
 Documentación detallada (arquitectura, catálogo, cómo agregar pruebas): **[misc/docs/PRUEBAS_ROBOT.md](misc/docs/PRUEBAS_ROBOT.md)**.
 
 ### 1. Preparar Python y Robot (una vez)
@@ -192,7 +192,7 @@ psql -h localhost -p 5433 -U postgres -d cinematch -f backend/misc/scripts/seed_
 cd ~/cinematch/frontend/e2e/robot
 source .venv/bin/activate
 
-./run_tests.sh                       # Todas (153)
+./run_tests.sh                       # Todas (154)
 ./run_tests.sh --headless            # Sin ventana del navegador
 ./run_tests.sh --suite auth          # Una suite: auth, salas, filtros, swipe, chat,
                                      #   admin, perfil_resultados, seguridad, e2e,
@@ -255,5 +255,5 @@ misc/              # Documentación adicional (requerimientos, correcciones, doc
 | `./run_tests.sh: Permission denied` | `chmod +x e2e/robot/run_tests.sh` |
 | `/bin/bash^M: bad interpreter` | Finales CRLF: `sed -i 's/\r$//' e2e/robot/run_tests.sh` y configura `core.autocrlf input` |
 | Robot no encuentra geckodriver / Firefox no abre | Revisa la sección *Firefox y geckodriver en WSL* o usa `--headless` |
-| Las pruebas reportan 155 en vez de 153 | Se incluyeron las de `diagnostico/`; usa `run_tests.sh` |
+| Las pruebas reportan 156 en vez de 154 | Se incluyeron las de `diagnostico/`; usa `run_tests.sh` |
 | Más detalles | [misc/docs/PRUEBAS_ROBOT.md](misc/docs/PRUEBAS_ROBOT.md#7-problemas-conocidos-y-solución) |

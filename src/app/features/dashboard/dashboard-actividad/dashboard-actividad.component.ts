@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { MetricasDia, MetricasService } from '../../../core/services/admin.service';
 import { ReporteXlsxService } from '../../../core/services/reporte-xlsx.service';
+import type { IndicadorReporte } from '../../../core/services/reporte-xlsx.service';
 import {
   ORDEN_SEMANA,
   PuntoGrafica,
@@ -140,9 +141,9 @@ import {
               </article>
 
               <article class="kpi metric-card" data-testid="kpi-activas">
-                <p class="kpi__value">{{ totales().activasUltimoDia | number:'1.0-0' }}</p>
-                <p class="kpi__label">Salas activas (último día)</p>
-                <p class="kpi__detail">{{ totales().promedioDiario | number:'1.1-1' }} salas/día en promedio</p>
+                <p class="kpi__value">{{ totales().promedioDiario | number:'1.1-1' }}</p>
+                <p class="kpi__label">Promedio diario de salas</p>
+                <p class="kpi__detail">{{ totales().activasUltimoDia }} activas el último día</p>
                 <svg class="sparkline" viewBox="0 0 100 20" preserveAspectRatio="none" aria-hidden="true">
                   <polyline [attr.points]="sparklineActivas()" fill="none" stroke="#f59e0b" stroke-width="1.5"/>
                 </svg>
@@ -407,6 +408,130 @@ export class DashboardActividadComponent implements OnInit {
     return `${conversion}% de las salas terminaron en match; la actividad ${direccion} ${Math.abs(cambio).toFixed(1)}% en la segunda mitad del periodo.`;
   });
 
+  periodoAnterior = computed(() => {
+    const actual = this.historialFiltrado();
+    if (!actual.length) return null;
+
+    const inicio = normalizarFecha(actual[0].fecha);
+    const dias = actual.length;
+    const limite = new Date(inicio);
+    limite.setUTCDate(limite.getUTCDate() - dias);
+
+    const previo = this.historial().filter((dia) => {
+      const fecha = normalizarFecha(dia.fecha);
+      return fecha >= limite && fecha < inicio;
+    });
+
+    if (!previo.length) return null;
+
+    const salas = previo.reduce((total, dia) => total + dia.totalSalas, 0);
+    const matches = previo.reduce((total, dia) => total + dia.totalMatches, 0);
+
+    return {
+      salas,
+      matches,
+      conversion: salas ? (matches / salas) * 100 : 0,
+      promedioDiario: salas / previo.length,
+    };
+  });
+
+  hallazgos = computed(() => {
+    const lista = this.historialFiltrado();
+    if (!lista.length) return [];
+
+    const totales = this.totales();
+    const mejorDia = this.mejorDiaSemana();
+    const pico = [...lista].sort((a, b) => b.totalSalas - a.totalSalas)[0];
+    const mitades = this.compararMitades();
+    const resultado: string[] = [
+      `El periodo cerró con ${totales.salas} salas y ${totales.matches} matches (${totales.conversion.toFixed(1)}% de conversión).`,
+    ];
+
+    if (mejorDia) {
+      resultado.push(`El ${mejorDia.dia} concentra el mayor promedio de salas (${mejorDia.promedio.toFixed(1)} por día).`);
+    }
+    if (pico) {
+      resultado.push(`El ${formatearFecha(pico.fecha)} fue el día con más salas (${pico.totalSalas}).`);
+    }
+    if (mitades) {
+      resultado.push(
+        `La actividad ${mitades.cambio >= 0 ? 'creció' : 'bajó'} ${Math.abs(mitades.cambio).toFixed(1)}% en la segunda mitad del periodo.`,
+      );
+    }
+
+    return resultado;
+  });
+
+  recomendaciones = computed(() => {
+    const totales = this.totales();
+    const mejorDia = this.mejorDiaSemana();
+    const mitades = this.compararMitades();
+    const resultado: string[] = [];
+
+    if (totales.conversion < 50) {
+      resultado.push('Revisar el flujo de filtros y swipe para elevar la conversión por encima del 50%.');
+    } else {
+      resultado.push('Mantener las condiciones actuales del flujo: la conversión supera la meta del 50%.');
+    }
+    if (mejorDia) {
+      resultado.push(`Concentrar campañas y recordatorios los ${mejorDia.dia}, cuando hay más actividad.`);
+    }
+    if (mitades && mitades.cambio < 0) {
+      resultado.push('Investigar la caída de actividad de la segunda mitad y recuperar a los usuarios inactivos.');
+    } else {
+      resultado.push('Documentar las acciones del periodo para replicar el crecimiento observado.');
+    }
+
+    return resultado;
+  });
+
+  indicadores = computed<IndicadorReporte[]>(() => {
+    const lista = this.historialFiltrado();
+    const totales = this.totales();
+    const mitades = this.compararMitades();
+    const porcentajeActividad = lista.length ? (totales.diasActivos / lista.length) * 100 : 0;
+    const crecimiento = mitades?.cambio ?? 0;
+
+    return [
+      {
+        indicador: 'Conversión a match',
+        valor: `${totales.conversion.toFixed(1)}%`,
+        meta: '≥ 50%',
+        estado: totales.conversion >= 50 ? 'En meta' : totales.conversion >= 35 ? 'En riesgo' : 'Fuera de meta',
+      },
+      {
+        indicador: 'Promedio diario de salas',
+        valor: Number(totales.promedioDiario.toFixed(1)),
+        meta: '≥ 10 salas/día',
+        estado: totales.promedioDiario >= 10 ? 'En meta' : totales.promedioDiario >= 6 ? 'En riesgo' : 'Fuera de meta',
+      },
+      {
+        indicador: 'Días con actividad',
+        valor: `${totales.diasActivos}/${lista.length}`,
+        meta: '≥ 80% del periodo',
+        estado: porcentajeActividad >= 80 ? 'En meta' : porcentajeActividad >= 50 ? 'En riesgo' : 'Fuera de meta',
+      },
+      {
+        indicador: 'Crecimiento de actividad',
+        valor: `${crecimiento >= 0 ? '+' : ''}${crecimiento.toFixed(1)}%`,
+        meta: '≥ 0%',
+        estado: crecimiento >= 0 ? 'En meta' : crecimiento >= -10 ? 'En riesgo' : 'Fuera de meta',
+      },
+    ];
+  });
+
+  topDias = computed(() =>
+    [...this.historialFiltrado()]
+      .sort((a, b) => b.totalSalas - a.totalSalas)
+      .slice(0, 5)
+      .map((dia) => [
+        formatearFecha(dia.fecha),
+        dia.totalSalas,
+        dia.totalMatches,
+        Number((dia.totalSalas ? (dia.totalMatches / dia.totalSalas) * 100 : 0).toFixed(1)),
+      ]),
+  );
+
   maxValor = computed(() => {
     const lista = this.historialFiltrado();
     if (!lista.length) return 10;
@@ -585,30 +710,92 @@ export class DashboardActividadComponent implements OnInit {
 
     const lista = this.historialFiltrado();
     const totales = this.totales();
+    const anterior = this.periodoAnterior();
     const periodo = this.periodoTexto();
+    const comparar = (actual: number, previo: number | undefined) => {
+      const variacion = previo == null || previo === 0 ? null : ((actual - previo) / previo) * 100;
+      return {
+        variacion,
+        variacionPositiva: previo == null || actual >= previo,
+      };
+    };
 
     try {
       await this.reporteSvc.descargar({
         nombreArchivo: 'cinematch-dashboard-actividad',
-        hojas: [
-          {
-            nombre: 'Resumen',
-            titulo: 'CineMatch · Actividad y conversión',
-            subtitulo: this.conclusion(),
-            periodo,
+        portada: {
+          titulo: 'Actividad y conversión',
+          subtitulo: 'Reporte ejecutivo de operación',
+          responsable: 'anabyt · anaelisaahumada11@gmail.com',
+          periodo,
+          indice: [
+            'Resumen ejecutivo',
+            'Serie diaria de actividad',
+            'Promedio por día de la semana',
+            'Metodología y definición de indicadores',
+          ],
+        },
+        resumen: {
+          titulo: 'Actividad y conversión',
+          lectura: this.conclusion(),
+          kpis: [
+            {
+              etiqueta: 'Salas creadas',
+              valor: totales.salas,
+              formato: 'entero',
+              detalle: `${totales.diasActivos} días con actividad`,
+              ...comparar(totales.salas, anterior?.salas),
+            },
+            {
+              etiqueta: 'Matches generados',
+              valor: totales.matches,
+              formato: 'entero',
+              detalle: `${totales.conversion.toFixed(1)}% de conversión`,
+              ...comparar(totales.matches, anterior?.matches),
+            },
+            {
+              etiqueta: 'Conversión a match',
+              valor: Number(totales.conversion.toFixed(1)),
+              formato: 'porcentaje',
+              detalle: 'Matches / salas del periodo',
+              ...comparar(totales.conversion, anterior?.conversion),
+            },
+            {
+              etiqueta: 'Promedio diario de salas',
+              valor: Number(totales.promedioDiario.toFixed(1)),
+              formato: 'decimal',
+              detalle: `${totales.activasUltimoDia} activas el último día`,
+              ...comparar(totales.promedioDiario, anterior?.promedioDiario),
+            },
+          ],
+          indicadores: this.indicadores(),
+          hallazgos: this.hallazgos(),
+          recomendaciones: this.recomendaciones(),
+          destacada: {
+            titulo: 'Top 5 días por actividad',
             columnas: [
-              { titulo: 'Indicador', ancho: 30, tipo: 'texto' },
-              { titulo: 'Valor', ancho: 16, tipo: 'decimal' },
-              { titulo: 'Detalle', ancho: 44, tipo: 'texto' },
+              { titulo: 'Fecha', ancho: 16, tipo: 'texto' },
+              { titulo: 'Salas', ancho: 10, tipo: 'entero' },
+              { titulo: 'Matches', ancho: 10, tipo: 'entero' },
+              { titulo: 'Conversión (%)', ancho: 14, tipo: 'porcentaje' },
             ],
-            filas: [
-              ['Salas creadas', totales.salas, `${totales.diasActivos} días con actividad`],
-              ['Matches generados', totales.matches, `${totales.conversion.toFixed(1)}% de conversión`],
-              ['Conversión a match (%)', Number(totales.conversion.toFixed(1)), 'Matches / salas del periodo'],
-              ['Promedio diario de salas', Number(totales.promedioDiario.toFixed(1)), 'Salas creadas por día'],
-              ['Salas activas (último día)', totales.activasUltimoDia, 'Último día del periodo'],
-            ],
+            filas: this.topDias(),
+            columnaBarras: 1,
           },
+        },
+        metodologia: {
+          titulo: 'Metodología del reporte',
+          puntos: [
+            'Fuente: consulta GraphQL historialMetricas, que agrupa la actividad por fecha de creación de la sala.',
+            'Salas creadas: total de salas registradas en el periodo seleccionado.',
+            'Matches: salas del periodo que generaron al menos un match.',
+            'Conversión a match: matches del periodo divididos entre salas creadas, expresada en porcentaje.',
+            'Promedio diario: salas creadas entre los días del periodo con información.',
+            'Comparativo: ventana inmediatamente anterior de la misma duración que el periodo seleccionado.',
+            'El reporte exporta exactamente los datos filtrados en el dashboard al momento de la descarga.',
+          ],
+        },
+        hojas: [
           {
             nombre: 'Serie diaria',
             titulo: 'Serie diaria de actividad',
@@ -638,6 +825,8 @@ export class DashboardActividadComponent implements OnInit {
               Number(totales.conversion.toFixed(1)),
               '',
             ],
+            barrasDatos: [1, 3, 4],
+            escalaColor: { columna: 5, minimo: 1, maximo: 10 },
           },
           {
             nombre: 'Día de semana',
@@ -656,15 +845,34 @@ export class DashboardActividadComponent implements OnInit {
               barra.total,
               barra.dias,
             ]),
+            barrasDatos: [1, 2],
           },
         ],
       });
-      this.msgExport.set('Reporte XLSX generado con los datos del periodo.');
+      this.msgExport.set('Reporte ejecutivo XLSX generado con los datos del periodo.');
     } catch {
       this.errorExport.set('No se pudo generar el reporte. Intenta de nuevo.');
     } finally {
       this.exportando.set(false);
     }
+  }
+
+  private mejorDiaSemana(): { dia: string; promedio: number } | null {
+    const barras = this.barrasSemana().filter((barra) => barra.dias > 0);
+    if (!barras.length) return null;
+    const mejor = barras.reduce((maximo, barra) => (barra.promedio > maximo.promedio ? barra : maximo));
+    return { dia: mejor.dia, promedio: mejor.promedio };
+  }
+
+  private compararMitades(): { cambio: number } | null {
+    const lista = this.historialFiltrado();
+    if (lista.length < 2) return null;
+
+    const mitad = Math.floor(lista.length / 2);
+    const inicio = promedio(lista.slice(0, mitad).map((dia) => dia.totalSalas));
+    const fin = promedio(lista.slice(lista.length - mitad).map((dia) => dia.totalSalas));
+    if (!inicio) return null;
+    return { cambio: ((fin - inicio) / inicio) * 100 };
   }
 
   private puntosDe(campo: 'totalSalas' | 'totalMatches'): PuntoGrafica[] {

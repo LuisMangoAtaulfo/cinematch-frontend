@@ -4,7 +4,7 @@ Documentación detallada de la suite E2E ubicada en [`e2e/robot/`](../../e2e/rob
 Para la guía rápida de instalación y ejecución consulta el [README](../../README.md#-pruebas-automatizadas-robot-framework).
 
 - **Herramientas:** Robot Framework 7.5.1 · SeleniumLibrary 6.9.0 · Firefox + geckodriver
-- **Alcance:** 153 casos de prueba que cubren los casos de uso CU-01 … CU-12
+- **Alcance:** 154 casos de prueba que cubren los casos de uso CU-01 … CU-12
 - **Tipo:** pruebas de caja negra sobre la UI (Angular) contra el backend real (Spring Boot + PostgreSQL)
 
 ---
@@ -24,7 +24,7 @@ e2e/robot/
 ├── test_admin.robot             # 21 casos
 ├── test_seguridad.robot         # 22 casos
 ├── test_e2e.robot               # 13 casos
-├── test_dashboard_actividad.robot # 10 casos
+├── test_dashboard_actividad.robot # 11 casos
 ├── diagnostico/                 # Pruebas auxiliares de depuración (NO forman parte del plan)
 │   ├── test_diag.robot
 │   └── test_min.robot
@@ -58,11 +58,11 @@ test_*.robot  ──usa──▶  keywords.robot  ──usa──▶  variables.
 | `test_admin.robot` | 21 | `TC-ADMIN-` | CU-10, CU-11, CU-12 | Sistema |
 | `test_seguridad.robot` | 22 | `TC-SEG-` | Transversal (guards, roles) | Sistema |
 | `test_e2e.robot` | 13 | `TC-E2E-` | Flujos completos | Regresión |
-| `test_dashboard_actividad.robot` | 10 | `TC-DASH-A-` | CU-10, CU-11 (dashboard) | Sistema |
-| **Total** | **153** | | | Unitarias 28 · Integrales 59 · Sistema 53 · Regresión 13 |
+| `test_dashboard_actividad.robot` | 11 | `TC-DASH-A-` | CU-10, CU-11 (dashboard) | Sistema |
+| **Total** | **154** | | | Unitarias 28 · Integrales 59 · Sistema 54 · Regresión 13 |
 
 > La carpeta `diagnostico/` contiene 2 pruebas extra (`TC-DIAG`, `TC-MIN`) con el tag `diagnostico`.
-> `run_tests.sh` las **excluye por defecto**, por lo que una corrida completa reporta 153 pruebas.
+> `run_tests.sh` las **excluye por defecto**, por lo que una corrida completa reporta 154 pruebas.
 
 ---
 

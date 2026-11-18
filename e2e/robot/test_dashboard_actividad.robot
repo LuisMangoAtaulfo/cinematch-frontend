@@ -110,6 +110,17 @@ TC-DASH-A-010: Usuario normal no accede al dashboard
     Go To    ${ADMIN_DASHBOARD_URL}
     Wait Until Keyword Succeeds    10s    1s    Verificar URL Contiene    /login
 
+TC-DASH-A-011: Reporte XLSX con hojas ejecutivas
+    [Documentation]    El archivo descargado incluye portada, resumen ejecutivo y hojas de detalle
+    [Tags]    dashboard    positivo    export
+    [Teardown]    Limpiar Descargas
+    Ir A Dashboard Actividad
+    Limpiar Descargas
+    Click Button    ${BTN_EXPORTAR_XLSX}
+    Esperar Descarga XLSX    cinematch-dashboard-actividad
+    Verificar Hojas XLSX    cinematch-dashboard-actividad
+    ...    Portada    Resumen ejecutivo    Serie diaria    Día de semana    Metodología
+
 *** Keywords ***
 Ir A Dashboard Actividad
     [Documentation]    Inicia sesión como administrador y abre el dashboard de actividad

@@ -4,6 +4,7 @@ Library           SeleniumLibrary
 Library           Collections
 Library           String
 Library           OperatingSystem
+Library           Process
 Resource          variables.robot
 
 *** Keywords ***
@@ -51,12 +52,28 @@ Esperar Descarga XLSX
 Verificar Descarga XLSX
     [Documentation]    Comprueba que existe un XLSX descargado, con nombre y tamaño válidos
     [Arguments]    ${nombre_esperado}
+    ${archivo}=    Obtener Archivo XLSX    ${nombre_esperado}
+    ${tamano}=    Get File Size    ${archivo}
+    Should Be True    ${tamano} > 0    El archivo XLSX descargado está vacío
+
+Obtener Archivo XLSX
+    [Documentation]    Devuelve el primer XLSX descargado que coincida con el nombre esperado
+    [Arguments]    ${nombre_esperado}
     @{archivos}=    List Files In Directory    ${DOWNLOADS_DIR}    *.xlsx
     Should Not Be Empty    ${archivos}    No se descargó ningún archivo XLSX
     ${archivo}=    Get From List    ${archivos}    0
     Should Contain    ${archivo}    ${nombre_esperado}
-    ${tamano}=    Get File Size    ${archivo}
-    Should Be True    ${tamano} > 0    El archivo XLSX descargado está vacío
+    RETURN    ${archivo}
+
+Verificar Hojas XLSX
+    [Documentation]    Verifica que el XLSX descargado contenga las hojas indicadas
+    [Arguments]    ${nombre_esperado}    @{hojas}
+    ${archivo}=    Obtener Archivo XLSX    ${nombre_esperado}
+    ${salida}=    Run Process    python3    ${CURDIR}/verificar_xlsx.py    ${archivo}
+    Should Be Equal As Integers    ${salida.rc}    0    ${salida.stderr}
+    FOR    ${hoja}    IN    @{hojas}
+        Should Contain    ${salida.stdout}    ${hoja}
+    END
 
 Establecer Rango De Fechas
     [Documentation]    Escribe las fechas desde/hasta y dispara el evento change de Angular
