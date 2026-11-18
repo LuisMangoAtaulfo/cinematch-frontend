@@ -220,6 +220,27 @@ Abre `report-<fecha>.html` para el resumen y `log-<fecha>.html` para el detalle 
 - Las pruebas nuevas siguen el formato `TC-<MÓDULO>-NNN` y deben agregarse al Plan de Pruebas.
 - No subas `results/` ni `.venv/` (ya están en `.gitignore`).
 
+### 7. Reportes XLSX de administración
+
+Los dashboards `/admin/dashboard` y `/admin/dashboard/tendencias` exportan
+reportes generados en el navegador con ExcelJS:
+
+- Portada, Resumen con KPIs, hojas de detalle y Metodología.
+- Tablas formateadas, barras de datos y escala de color (sin gráficas de imagen).
+- La librería se carga solo al pulsar “Exportar XLSX”.
+- Las pruebas validan las hojas con `e2e/robot/verificar_xlsx.py`.
+
+Para que los reportes tengan historial suficiente, carga los datos demo:
+
+```bash
+export PGPASSWORD=1234
+psql -h localhost -p 5433 -U postgres -d cinematch \
+     -f ../backend/misc/scripts/seed_dashboard_demo.sql
+```
+
+> El script borra las tablas transaccionales locales antes de sembrar. Consulta
+> `../CONTEXTO_PROYECTO.md` para el contexto completo del proyecto.
+
 ---
 
 ## 📦 Build y despliegue

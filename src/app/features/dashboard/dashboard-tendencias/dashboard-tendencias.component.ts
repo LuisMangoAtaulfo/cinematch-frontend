@@ -58,14 +58,13 @@ interface CeldaCalor {
           <header class="dash__head">
             <div>
               <p class="section-title">Satisfacción y calidad</p>
-              <p class="section-sub">{{ conclusion() }}</p>
             </div>
             <button
               id="btn-exportar-xlsx"
               data-testid="btn-exportar-xlsx"
               class="btn btn--primary"
               [disabled]="!hayDatos() || exportando()"
-              [attr.title]="hayDatos() ? 'Descarga el reporte con los datos del periodo' : 'No hay datos para exportar'"
+              [attr.title]="hayDatos() ? 'Descargar XLSX' : 'No hay datos para exportar'"
               (click)="exportar()">
               {{ exportando() ? 'Generando…' : 'Exportar XLSX' }}
             </button>
@@ -156,7 +155,6 @@ interface CeldaCalor {
             <section class="charts">
               <article class="card chart" data-testid="chart-distribucion">
                 <p class="chart__title">Distribución de calificaciones</p>
-                <p class="chart__sub">Cuántas personas otorgaron cada nota (1 a 10).</p>
                 <svg [attr.viewBox]="'0 0 ' + chartWidth + ' ' + chartHeight" role="img"
                      aria-label="Distribución de calificaciones por nota">
                   <line [attr.x1]="padding" [attr.y1]="chartHeight - padding"
@@ -179,7 +177,6 @@ interface CeldaCalor {
 
               <article class="card chart" data-testid="chart-promedio-diario">
                 <p class="chart__title">Promedio diario y meta</p>
-                <p class="chart__sub">La línea punteada marca la meta de 7 puntos.</p>
                 <svg [attr.viewBox]="'0 0 ' + chartWidth + ' ' + chartHeight" role="img"
                      aria-label="Promedio diario de calificación con meta de siete puntos">
                   @for (guia of guiasPromedio(); track guia.valor) {
@@ -219,7 +216,6 @@ interface CeldaCalor {
             <section class="charts charts--wide">
               <article class="card chart" data-testid="heatmap">
                 <p class="chart__title">Concentración de notas por día</p>
-                <p class="chart__sub">Cada celda cuenta las calificaciones de ese rango en ese día de la semana.</p>
                 <div class="heatmap" role="table" aria-label="Mapa de calor de calificaciones por día y rango de nota">
                   <div class="heatmap__grid" role="row">
                     <span class="heatmap__corner"></span>
@@ -250,7 +246,6 @@ interface CeldaCalor {
 
               <article class="card chart" data-testid="tabla-detalle">
                 <p class="chart__title">Últimas calificaciones</p>
-                <p class="chart__sub">Detalle de las 12 calificaciones más recientes del periodo.</p>
                 <div class="tabla-wrap">
                   <table>
                     <thead>
@@ -277,11 +272,6 @@ interface CeldaCalor {
                 </div>
               </article>
             </section>
-
-            <p class="footnote">
-              El color se usa con intención: verde para notas altas, ámbar para notas medias y rojo
-              para notas bajas. El reporte XLSX incluye resumen, serie diaria y el detalle completo.
-            </p>
           }
         </div>
       </main>
@@ -291,7 +281,6 @@ interface CeldaCalor {
     .dash { flex: 1; padding: 28px 24px; }
     .dash__inner { max-width: 1180px; margin: 0 auto; }
     .dash__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
-    .dash__head .section-sub { margin-bottom: 0; max-width: 720px; }
     .export-msg { background: rgba(34, 197, 94, 0.12); border: 1px solid var(--success); color: var(--success); border-radius: var(--radius); padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
     .export-error { background: rgba(239, 68, 68, 0.12); border: 1px solid var(--danger); color: var(--danger); border-radius: var(--radius); padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
     .filters { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 24px; padding: 16px; }
@@ -307,7 +296,6 @@ interface CeldaCalor {
     .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
     .chart { padding: 18px; margin-bottom: 0; }
     .chart__title { font-weight: 600; font-size: 14px; margin-bottom: 2px; color: var(--text); }
-    .chart__sub { font-size: 12px; color: var(--text-sub); margin-bottom: 12px; }
     .chart svg { width: 100%; height: auto; display: block; }
     .svg-label { font-size: 10px; fill: var(--text-sub); }
     .svg-value { font-size: 10px; font-weight: 600; fill: var(--text); }
@@ -328,7 +316,6 @@ interface CeldaCalor {
     .nota { display: inline-block; min-width: 26px; padding: 2px 8px; border-radius: 12px; color: #0f0f0f; font-weight: 600; text-align: center; }
     .empty { text-align: center; padding: 32px; margin-bottom: 24px; }
     .empty__hint { font-size: 13px; color: var(--text-sub); margin-top: 6px; }
-    .footnote { font-size: 12px; color: var(--text-sub); text-align: center; margin-top: 8px; }
     @media (max-width: 980px) {
       .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .charts, .charts--wide { grid-template-columns: 1fr; }
@@ -426,25 +413,6 @@ export class DashboardTendenciasComponent implements OnInit {
     };
   });
 
-  conclusion = computed(() => {
-    const lista = this.calificacionesFiltradas();
-    if (!lista.length) return 'Sin calificaciones en el periodo seleccionado.';
-
-    const resumen = this.resumen();
-    if (lista.length < 2) {
-      return `Promedio de ${resumen.promedio.toFixed(1)}/10 con ${resumen.satisfaccion.toFixed(0)}% de notas altas; se necesitan más calificaciones para comparar mitades.`;
-    }
-
-    const ordenadas = [...lista].sort((a, b) => a.fecha.localeCompare(b.fecha));
-    const mitad = Math.floor(ordenadas.length / 2);
-    const inicio = promedio(ordenadas.slice(0, mitad).map((calificacion) => calificacion.valor));
-    const fin = promedio(ordenadas.slice(ordenadas.length - mitad).map((calificacion) => calificacion.valor));
-    const diferencia = fin - inicio;
-    const direccion = diferencia >= 0 ? 'mejoró' : 'empeoró';
-
-    return `Promedio de ${resumen.promedio.toFixed(1)}/10 y ${resumen.satisfaccion.toFixed(0)}% de notas altas; la calificación ${direccion} ${Math.abs(diferencia).toFixed(1)} puntos entre mitades.`;
-  });
-
   sparklinePromedio = computed(() => generarSparkline(this.serieDiaria().map((dia) => dia.promedio)));
   sparklineTotal = computed(() => generarSparkline(this.serieDiaria().map((dia) => dia.total)));
   sparklineSatisfaccion = computed(() => generarSparkline(this.serieDiaria().map((dia) => dia.satisfaccion)));
@@ -478,58 +446,6 @@ export class DashboardTendenciasComponent implements OnInit {
       satisfaccion: (satisfechos / total) * 100,
       riesgo: (riesgo / total) * 100,
     };
-  });
-
-  hallazgos = computed(() => {
-    const lista = this.calificacionesFiltradas();
-    if (!lista.length) return [];
-
-    const resumen = this.resumen();
-    const resultado: string[] = [
-      `El periodo cerró con ${resumen.total} calificaciones y un promedio de ${resumen.promedio.toFixed(1)}/10.`,
-      `${resumen.satisfaccion.toFixed(0)}% de las calificaciones fueron altas (≥8) y ${resumen.riesgo.toFixed(0)}% fueron bajas (≤5).`,
-    ];
-
-    const mejoresDias = [...this.serieDiaria()]
-      .filter((dia) => dia.total > 0)
-      .sort((a, b) => b.promedio - a.promedio);
-    if (mejoresDias.length >= 2) {
-      resultado.push(
-        `El ${mejoresDias[0].etiqueta} tuvo el mejor promedio (${mejoresDias[0].promedio.toFixed(1)}) y el ${mejoresDias[mejoresDias.length - 1].etiqueta} el más bajo (${mejoresDias[mejoresDias.length - 1].promedio.toFixed(1)}).`,
-      );
-    }
-
-    const mitades = this.compararMitades();
-    if (mitades) {
-      resultado.push(
-        `La calificación ${mitades.diferencia >= 0 ? 'mejoró' : 'empeoró'} ${Math.abs(mitades.diferencia).toFixed(1)} puntos entre la primera y la segunda mitad.`,
-      );
-    }
-
-    return resultado;
-  });
-
-  recomendaciones = computed(() => {
-    const resumen = this.resumen();
-    const mitades = this.compararMitades();
-    const resultado: string[] = [];
-
-    if (resumen.riesgo > 10) {
-      resultado.push('Revisar las salas con calificaciones de 1 a 5 y dar seguimiento a sus usuarios.');
-    } else {
-      resultado.push('Mantener el nivel de servicio: el riesgo de notas bajas está dentro de la meta.');
-    }
-    if (resumen.satisfaccion < 70) {
-      resultado.push('Reforzar la calidad percibida para llevar la satisfacción por encima del 70%.');
-    } else {
-      resultado.push('Documentar las prácticas del periodo para sostener la satisfacción actual.');
-    }
-    if (mitades && mitades.diferencia < 0) {
-      resultado.push('Investigar la caída de calificación de la segunda mitad del periodo.');
-    }
-    resultado.push('Analizar las notas de 6 y 7 para convertirlas en experiencias de 8 o más.');
-
-    return resultado;
   });
 
   indicadores = computed<IndicadorReporte[]>(() => {
@@ -739,19 +655,18 @@ export class DashboardTendenciasComponent implements OnInit {
         nombreArchivo: 'cinematch-dashboard-satisfaccion',
         portada: {
           titulo: 'Satisfacción y calidad',
-          subtitulo: 'Reporte ejecutivo de experiencia del usuario',
+          subtitulo: 'Experiencia del usuario',
           responsable: 'Sushikiu · susanaortega360@gmail.com',
           periodo,
           indice: [
-            'Resumen ejecutivo',
+            'Resumen',
             'Serie diaria de satisfacción',
             'Detalle de calificaciones',
-            'Metodología y definición de indicadores',
+            'Metodología',
           ],
         },
         resumen: {
           titulo: 'Satisfacción y calidad',
-          lectura: this.conclusion(),
           kpis: [
             {
               etiqueta: 'Promedio de calificación',
@@ -783,8 +698,6 @@ export class DashboardTendenciasComponent implements OnInit {
             },
           ],
           indicadores: this.indicadores(),
-          hallazgos: this.hallazgos(),
-          recomendaciones: this.recomendaciones(),
           destacada: {
             titulo: 'Distribución por nota',
             columnas: [
@@ -797,15 +710,10 @@ export class DashboardTendenciasComponent implements OnInit {
           },
         },
         metodologia: {
-          titulo: 'Metodología del reporte',
+          titulo: 'Metodología',
           puntos: [
             'Fuente: consulta GraphQL retroalimentacion, con el registro de calificaciones de la plataforma.',
-            'Promedio: media aritmética de las calificaciones del periodo, en escala de 1 a 10.',
-            'Satisfacción: porcentaje de calificaciones con nota mayor o igual a 8.',
-            'Riesgo: porcentaje de calificaciones con nota menor o igual a 5.',
-            'Tendencia: diferencia de promedio entre la primera y la segunda mitad del periodo.',
             'Comparativo: ventana inmediatamente anterior de la misma duración que el periodo seleccionado.',
-            'El reporte exporta exactamente las calificaciones filtradas en el dashboard al momento de la descarga.',
           ],
         },
         hojas: [
@@ -863,7 +771,7 @@ export class DashboardTendenciasComponent implements OnInit {
           },
         ],
       });
-      this.msgExport.set('Reporte ejecutivo XLSX generado con los datos del periodo.');
+      this.msgExport.set('Reporte XLSX generado con los datos del periodo.');
     } catch {
       this.errorExport.set('No se pudo generar el reporte. Intenta de nuevo.');
     } finally {

@@ -160,7 +160,32 @@ El documento *Plan de Pruebas* se generó a partir de un `output-*.xml` con los 
 
 ---
 
-## 7. Problemas conocidos y solución
+## 7. Descargas XLSX y reportes
+
+Las suites `test_dashboard_actividad.robot` y `test_dashboard_satisfaccion.robot`
+verifican la descarga real del reporte y su estructura:
+
+- `Abrir Navegador` configura Firefox para descargar en
+  `e2e/robot/results/downloads` sin preguntar (incluido `--headless`).
+- `Limpiar Descargas` elimina los `.xlsx` de corridas anteriores.
+- `Esperar Descarga XLSX` espera hasta 30 s a que aparezca el archivo.
+- `Verificar Hojas XLSX` usa `verificar_xlsx.py`, que lee `xl/workbook.xml`
+  con `zipfile` (solo librería estándar) y valida las hojas esperadas.
+
+Hojas esperadas:
+
+| Reporte | Hojas |
+|---|---|
+| Actividad | Portada · Resumen · Serie diaria · Día de semana · Metodología |
+| Satisfacción | Portada · Resumen · Serie diaria · Calificaciones · Metodología |
+
+El reporte se genera en el navegador con ExcelJS y exporta solo el periodo
+filtrado. No usa gráficas de imagen: tablas formateadas, barras de datos y
+escala de color.
+
+---
+
+## 8. Problemas conocidos y solución
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|

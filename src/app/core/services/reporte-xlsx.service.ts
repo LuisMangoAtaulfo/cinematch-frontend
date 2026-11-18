@@ -55,13 +55,10 @@ export interface TablaDestacadaReporte {
   columnaBarras?: number;
 }
 
-export interface ResumenEjecutivo {
+export interface ResumenReporte {
   titulo: string;
-  lectura: string;
   kpis: KpiReporte[];
   indicadores: IndicadorReporte[];
-  hallazgos: string[];
-  recomendaciones: string[];
   destacada?: TablaDestacadaReporte;
 }
 
@@ -73,7 +70,7 @@ export interface MetodologiaReporte {
 export interface ReporteXlsx {
   nombreArchivo: string;
   portada?: PortadaReporte;
-  resumen?: ResumenEjecutivo;
+  resumen?: ResumenReporte;
   metodologia?: MetodologiaReporte;
   hojas: HojaReporte[];
 }
@@ -102,7 +99,7 @@ const FORMATO_NUMERO: Record<TipoColumna, string | undefined> = {
 };
 
 /**
- * Genera reportes XLSX ejecutivos en el navegador con ExcelJS.
+ * Genera reportes XLSX en el navegador con ExcelJS.
  * La dependencia se carga solo al exportar para no afectar el bundle inicial.
  */
 @Injectable({ providedIn: 'root' })
@@ -114,7 +111,7 @@ export class ReporteXlsxService {
     libro.creator = 'CineMatch';
     libro.created = new Date();
     libro.title = reporte.portada?.titulo ?? 'Reporte CineMatch';
-    libro.subject = reporte.portada?.subtitulo ?? 'Reporte ejecutivo';
+    libro.subject = reporte.portada?.subtitulo ?? 'Reporte';
     libro.company = 'CineMatch';
     libro.keywords = 'cinematch, dashboard, reporte, xlsx';
     libro.description = 'Reporte generado automáticamente por CineMatch';
@@ -218,10 +215,10 @@ export class ReporteXlsxService {
     nota.font = { size: 9, italic: true, color: { argb: COLOR.textoSuave } };
   }
 
-  // ── Resumen ejecutivo ───────────────────────────────────
+  // ── Resumen ─────────────────────────────────────────────
 
-  private agregarResumen(libro: Workbook, datos: ResumenEjecutivo, periodo: string): void {
-    const hoja = libro.addWorksheet('Resumen ejecutivo', {
+  private agregarResumen(libro: Workbook, datos: ResumenReporte, periodo: string): void {
+    const hoja = libro.addWorksheet('Resumen', {
       properties: { tabColor: { argb: COLOR.acento } },
     });
 
@@ -293,23 +290,6 @@ export class ReporteXlsxService {
     hoja.getRow(8).height = 18;
 
     let fila = 10;
-    hoja.getCell(fila, 1).value = 'Lectura ejecutiva';
-    hoja.mergeCells(fila, 1, fila, 8);
-    hoja.getCell(fila, 1).font = { bold: true, size: 12, color: { argb: COLOR.azul } };
-    fila += 1;
-
-    this.pintarRango(hoja, fila, 1, fila + 2, 8, COLOR.fondoSuave);
-    this.bordeRango(hoja, fila, 1, fila + 2, 8);
-    hoja.mergeCells(fila, 1, fila + 2, 8);
-    const lectura = hoja.getCell(fila, 1);
-    lectura.value = datos.lectura;
-    lectura.font = { size: 11, color: { argb: COLOR.texto } };
-    lectura.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
-    hoja.getRow(fila).height = 22;
-    hoja.getRow(fila + 1).height = 22;
-    hoja.getRow(fila + 2).height = 22;
-
-    fila += 4;
     hoja.getCell(fila, 1).value = 'Indicadores vs meta';
     hoja.mergeCells(fila, 1, fila, 8);
     hoja.getCell(fila, 1).font = { bold: true, size: 12, color: { argb: COLOR.azul } };
@@ -351,10 +331,7 @@ export class ReporteXlsxService {
     }
     hoja.getRow(filaEncabezadoIndicadores).height = 20;
 
-    fila += 1;
-    this.agregarListaDoble(hoja, fila, 'Hallazgos', datos.hallazgos, 'Recomendaciones', datos.recomendaciones);
-    fila += Math.max(datos.hallazgos.length, datos.recomendaciones.length) + 2;
-
+    fila += 2;
     if (datos.destacada) {
       fila = this.agregarTablaDestacada(hoja, fila, datos.destacada);
     }
@@ -363,44 +340,6 @@ export class ReporteXlsxService {
     const nota = hoja.getCell(fila + 1, 1);
     nota.value = 'Los valores se calculan con los datos filtrados del periodo seleccionado.';
     nota.font = { size: 9, italic: true, color: { argb: COLOR.textoSuave } };
-  }
-
-  private agregarListaDoble(
-    hoja: Worksheet,
-    fila: number,
-    tituloIzquierda: string,
-    izquierda: string[],
-    tituloDerecha: string,
-    derecha: string[],
-  ): void {
-    hoja.getCell(fila, 1).value = tituloIzquierda;
-    hoja.mergeCells(fila, 1, fila, 4);
-    hoja.getCell(fila, 1).font = { bold: true, size: 12, color: { argb: COLOR.azul } };
-
-    hoja.getCell(fila, 5).value = tituloDerecha;
-    hoja.mergeCells(fila, 5, fila, 8);
-    hoja.getCell(fila, 5).font = { bold: true, size: 12, color: { argb: COLOR.azul } };
-
-    const totalFilas = Math.max(izquierda.length, derecha.length);
-    for (let indice = 0; indice < totalFilas; indice += 1) {
-      const numeroFila = fila + 1 + indice;
-      this.pintarRango(hoja, numeroFila, 1, numeroFila, 8, COLOR.fondoSuave);
-      this.bordeRango(hoja, numeroFila, 1, numeroFila, 8);
-
-      hoja.mergeCells(numeroFila, 1, numeroFila, 4);
-      const celdaIzquierda = hoja.getCell(numeroFila, 1);
-      celdaIzquierda.value = izquierda[indice] ? `•  ${izquierda[indice]}` : '';
-      celdaIzquierda.font = { size: 10, color: { argb: COLOR.texto } };
-      celdaIzquierda.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
-
-      hoja.mergeCells(numeroFila, 5, numeroFila, 8);
-      const celdaDerecha = hoja.getCell(numeroFila, 5);
-      celdaDerecha.value = derecha[indice] ? `•  ${derecha[indice]}` : '';
-      celdaDerecha.font = { size: 10, color: { argb: COLOR.texto } };
-      celdaDerecha.alignment = { wrapText: true, vertical: 'middle', indent: 1 };
-
-      hoja.getRow(numeroFila).height = 26;
-    }
   }
 
   private agregarTablaDestacada(hoja: Worksheet, fila: number, datos: TablaDestacadaReporte): number {

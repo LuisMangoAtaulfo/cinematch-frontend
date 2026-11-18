@@ -110,8 +110,8 @@ TC-DASH-B-010: Usuario normal no accede al dashboard
     Go To    ${ADMIN_TENDENCIAS_URL}
     Wait Until Keyword Succeeds    10s    1s    Verificar URL Contiene    /login
 
-TC-DASH-B-011: Reporte XLSX con hojas ejecutivas
-    [Documentation]    El archivo descargado incluye portada, resumen ejecutivo y hojas de detalle
+TC-DASH-B-011: Reporte XLSX con hojas del reporte
+    [Documentation]    El archivo descargado incluye portada, resumen y hojas de detalle
     [Tags]    dashboard    positivo    export
     [Teardown]    Limpiar Descargas
     Ir A Dashboard Satisfaccion
@@ -119,7 +119,7 @@ TC-DASH-B-011: Reporte XLSX con hojas ejecutivas
     Click Button    ${BTN_EXPORTAR_XLSX}
     Esperar Descarga XLSX    cinematch-dashboard-satisfaccion
     Verificar Hojas XLSX    cinematch-dashboard-satisfaccion
-    ...    Portada    Resumen ejecutivo    Serie diaria    Calificaciones    Metodología
+    ...    Portada    Resumen    Serie diaria    Calificaciones    Metodología
 
 *** Keywords ***
 Ir A Dashboard Satisfaccion
