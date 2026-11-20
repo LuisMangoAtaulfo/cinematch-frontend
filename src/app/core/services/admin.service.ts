@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Apollo } from 'apollo-angular';
-import {map, Observable} from 'rxjs';
+import { filter, map, Observable } from 'rxjs';
 import {
   CalificacionResponse,
   Metricas,
@@ -37,7 +37,8 @@ export class MetricasService {
       query: OBTENER_METRICAS,
       fetchPolicy: 'network-only'
     }).valueChanges.pipe(
-      map(result => result.data?.metricas as Metricas)
+      filter(result => result.data != null),
+      map(result => result.data!.metricas as Metricas)
     );
   }
 
@@ -46,7 +47,8 @@ export class MetricasService {
       query: HISTORIAL_METRICAS,
       fetchPolicy: 'network-only'
     }).valueChanges.pipe(
-      map(result => result.data?.historialMetricas as MetricasDia[])
+      filter(result => result.data != null),
+      map(result => (result.data!.historialMetricas ?? []) as MetricasDia[])
     );
   }
 }
@@ -57,11 +59,11 @@ export class PlataformasService {
   constructor(private apollo: Apollo) {}
 
   getAll(): Observable<Plataforma[]> {
-    return this.apollo.watchQuery<{ plataformas: Plataforma[] }>({
+    return this.apollo.query<{ plataformas: Plataforma[] }>({
       query: LISTAR_PLATAFORMAS,
       fetchPolicy: 'network-only'
-    }).valueChanges.pipe(
-      map(result => result.data?.plataformas as Plataforma[])
+    }).pipe(
+      map(result => result.data?.plataformas ?? [])
     );
   }
 
@@ -76,7 +78,7 @@ export class PlataformasService {
 
   getHabilitadas(): Observable<Plataforma[]> {
     return this.getAll().pipe(
-        map(p => p.filter(x => x.habilitada))
+        map(p => (p ?? []).filter(x => x.habilitada))
     );
   }
 
@@ -96,7 +98,8 @@ export class PlataformasService {
       variables: { id },
       fetchPolicy: 'network-only'
     }).valueChanges.pipe(
-      map(result => result.data?.plataformaEnUso ?? false)
+      filter(result => result.data != null),
+      map(result => result.data!.plataformaEnUso ?? false)
     );
   }
 }
@@ -111,7 +114,8 @@ export class RetroalimentacionService {
       query: OBTENER_RETROALIMENTACION,
       fetchPolicy: 'network-only'
     }).valueChanges.pipe(
-      map(result => result.data?.retroalimentacion as CalificacionResponse[])
+      filter(result => result.data != null),
+      map(result => (result.data!.retroalimentacion ?? []) as CalificacionResponse[])
     );
   }
 
@@ -120,7 +124,8 @@ export class RetroalimentacionService {
       query: PROMEDIO_CALIFICACION,
       fetchPolicy: 'network-only'
     }).valueChanges.pipe(
-      map(result => result.data?.promedioCalificacion ?? 0)
+      filter(result => result.data != null),
+      map(result => result.data!.promedioCalificacion ?? 0)
     );
   }
 }

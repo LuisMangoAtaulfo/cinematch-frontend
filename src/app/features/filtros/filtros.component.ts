@@ -120,7 +120,10 @@ export class FiltrosComponent implements OnInit {
   ngOnInit(): void {
     this.plataformasSvc.getHabilitadas().subscribe({
       next:  (data) => { this.plataformas.set(data); this.cargandoPlataformas.set(false); },
-      error: ()     => { this.cargandoPlataformas.set(false); } // falla silenciosa, el select queda solo con "Todas"
+      error: ()     => {
+        this.error.set('No se pudieron cargar las plataformas');
+        this.cargandoPlataformas.set(false);
+      }
     });
   }
 

@@ -96,8 +96,12 @@ const FORMATO_NUMERO: Record<TipoColumna, string | undefined> = {
 @Injectable({ providedIn: 'root' })
 export class ReporteXlsxService {
   async descargar(reporte: ReporteXlsx): Promise<void> {
-    const { Workbook } = await import('exceljs');
-    const libro: Workbook = new Workbook();
+    // ExcelJS se publica como UMD. En build de producción el chunk expone
+    // solo `default` (no el named export `Workbook`), así que se resuelve
+    // de forma compatible con ambos formatos.
+    const exceljs: any = await import('exceljs');
+    const WorkbookCtor = exceljs.Workbook ?? exceljs.default?.Workbook ?? exceljs.default;
+    const libro: Workbook = new WorkbookCtor();
 
     libro.creator = 'CineMatch';
     libro.created = new Date();
@@ -126,9 +130,16 @@ export class ReporteXlsxService {
 
     enlace.href = url;
     enlace.download = this.nombreArchivo(reporte.nombreArchivo);
-    enlace.click();
+    enlace.rel = 'noopener';
+    enlace.style.display = 'none';
 
-    URL.revokeObjectURL(url);
+    // Algunos navegadores (Firefox/Safari) solo descargan si el enlace
+    // está en el documento. No revocar la URL de inmediato: si el blob
+    // se libera antes de que el navegador empiece la descarga, falla.
+    document.body.appendChild(enlace);
+    enlace.click();
+    document.body.removeChild(enlace);
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
   }
 
   // ── Portada ─────────────────────────────────────────────

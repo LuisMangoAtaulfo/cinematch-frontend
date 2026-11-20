@@ -743,7 +743,8 @@ export class DashboardTendenciasComponent implements OnInit {
         ],
       });
       this.msgExport.set('Reporte XLSX generado con los datos del periodo.');
-    } catch {
+    } catch (error) {
+      console.error('Error al generar el reporte XLSX', error);
       this.errorExport.set('No se pudo generar el reporte. Intenta de nuevo.');
     } finally {
       this.exportando.set(false);

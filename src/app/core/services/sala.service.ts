@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Apollo } from 'apollo-angular';
 import { Observable, of, throwError } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { catchError, filter, map } from 'rxjs/operators';
 import { Contenido, CrearSalaRequest, Match, Sala, UnirseRequest } from '../models';
 import {
   OBTENER_SALA,
@@ -60,7 +60,10 @@ export class SalaService {
         query: OBTENER_SALA,
         variables: { id }
       })
-      .valueChanges.pipe(map(result => result.data?.obtenerSala as Sala));
+      .valueChanges.pipe(
+        filter(result => result.data != null),
+        map(result => result.data!.obtenerSala as Sala)
+      );
   }
 
   /**
@@ -78,8 +81,9 @@ export class SalaService {
         variables: { salaId }
       })
       .valueChanges.pipe(
+        filter(result => result.data != null),
         map((result): FiltrosResult => {
-          const data = result.data?.contenidoPorSala;
+          const data = result.data!.contenidoPorSala;
           if (data === null || data === undefined) return 'sin-filtros';
           if (data.length === 0) return 'sin-resultados';
           return data as Contenido[];
@@ -112,6 +116,9 @@ export class SalaService {
         query: BUSCAR_MATCHES,
         variables: { salaId: id }
       })
-      .valueChanges.pipe(map(result => result.data?.buscarMatches as Match[] ?? []));
+      .valueChanges.pipe(
+        filter(result => result.data != null),
+        map(result => (result.data!.buscarMatches ?? []) as Match[])
+      );
   }
 }

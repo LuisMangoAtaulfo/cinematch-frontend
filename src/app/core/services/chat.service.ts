@@ -1,7 +1,7 @@
 import { Injectable, signal, OnDestroy } from '@angular/core';
 import { Apollo } from 'apollo-angular';
 import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { filter, map } from 'rxjs/operators';
 import { EnviarMensajeRequest, Match, Mensaje } from '../models';
 import { HISTORIAL_CHAT } from '../graphql/queries';
 import { ENVIAR_MENSAJE } from '../graphql/mutations';
@@ -72,7 +72,10 @@ export class ChatService implements OnDestroy {
         query: HISTORIAL_CHAT,
         variables: { salaId }
       })
-      .valueChanges.pipe(map(result => result.data?.historialChat as Mensaje[] ?? []));
+      .valueChanges.pipe(
+        filter(result => result.data != null),
+        map(result => (result.data!.historialChat ?? []) as Mensaje[])
+      );
   }
 
   cargarHistorial(salaId: number): void {
@@ -81,9 +84,11 @@ export class ChatService implements OnDestroy {
         query: HISTORIAL_CHAT,
         variables: { salaId }
       })
-      .valueChanges.subscribe({
+      .valueChanges
+      .pipe(filter(result => result.data != null))
+      .subscribe({
         next: (result) => {
-          const msgs = result.data?.historialChat as Mensaje[] ?? [];
+          const msgs = (result.data!.historialChat ?? []) as Mensaje[];
           const idsHistorial = new Set(msgs.map(m => m.id));
           const extras = this._mensajes().filter(m => !idsHistorial.has(m.id));
           this._mensajes.set([...msgs, ...extras]);

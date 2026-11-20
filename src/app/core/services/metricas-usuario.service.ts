@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Apollo } from 'apollo-angular';
-import { Observable, map } from 'rxjs';
+import { filter, map, Observable } from 'rxjs';
 import { OBTENER_METRICAS, HISTORIAL_METRICAS } from '../graphql/queries/metricas.queries';
 import { MetricasDia } from './admin.service';
 
@@ -23,7 +23,10 @@ export class MetricasUsuarioService {
         variables: { id: usuarioId },
         fetchPolicy: 'network-only',
       })
-      .valueChanges.pipe(map((r) => r.data!.metricasUsuario as MetricasUsuario));
+      .valueChanges.pipe(
+        filter((r) => r.data != null),
+        map((r) => r.data!.metricasUsuario as MetricasUsuario)
+      );
   }
 
   getHistorial(usuarioId: number): Observable<MetricasDia[]> {
@@ -33,6 +36,9 @@ export class MetricasUsuarioService {
         variables: { id: usuarioId },
         fetchPolicy: 'network-only',
       })
-      .valueChanges.pipe(map((r) => (r.data!.historialMetricasUsuario || []) as MetricasDia[]));
+      .valueChanges.pipe(
+        filter((r) => r.data != null),
+        map((r) => (r.data!.historialMetricasUsuario ?? []) as MetricasDia[])
+      );
   }
 }

@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Apollo } from 'apollo-angular';
 import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { filter, map } from 'rxjs/operators';
 import { Match } from '../models';
 import { BUSCAR_MATCHES } from '../graphql/queries';
 
@@ -15,6 +15,9 @@ export class MatchesService {
         query: BUSCAR_MATCHES,
         variables: { salaId }
       })
-      .valueChanges.pipe(map(result => result.data?.buscarMatches as Match[] ?? []));
+      .valueChanges.pipe(
+        filter(result => result.data != null),
+        map(result => (result.data!.buscarMatches ?? []) as Match[])
+      );
   }
 }
